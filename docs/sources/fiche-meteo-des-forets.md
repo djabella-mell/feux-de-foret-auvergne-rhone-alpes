@@ -32,9 +32,9 @@
 | | Pièges relevés | Schéma différent selon les années ; code département `1` contre `01` ; lignes non triées en 2024 ; **`date` est la date d'émission, pas le jour cible** |
 | Gouvernance | Données personnelles | Aucune |
 | | Licence | Licence Ouverte / Open Licence 2.0 (Etalab) : réutilisation libre avec mention de la source |
-| | Référentiel géographique | Codes départements Insee, sans millésime indiqué. Le code 69 couvre le Rhône et la Métropole de Lyon (D-09). |
+| | Référentiel géographique | Codes départements Insee, sans millésime indiqué. Le code 69 couvre le Rhône et la Métropole de Lyon. |
 | Lineage | Amont | Production Météo-France (non documentée ici) |
-| | Transformations | Aucune à ce stade. Pour le profil : concaténation des trois fichiers et harmonisation du schéma (`src/README.md`) |
+| | Transformations | Aucune à ce stade |
 | Besoin | Questions servies | Q2 (seuil), Q3 (feux à niveau bas), Q4 (comparaison régionale et nationale) |
 
 **Limites pour la commande**

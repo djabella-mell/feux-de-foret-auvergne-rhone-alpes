@@ -21,7 +21,7 @@ Questions communes du groupe, consolidées à partir des quatre analyses individ
 |---|---|---|---|
 | Niveau de danger d'un jour | Météo des forêts, niveau **J+1 publié la veille** | J+2 de l'avant-veille | On garde J+1 (vérité à date). J+2 sert d'analyse de sensibilité. |
 | Existence et date d'un feu jusqu'en 2025 | BDIFF | SDMIS (quand reçu), presse | BDIFF pour la région. Pour le 69, le SDMIS primera s'il est plus complet, et l'écart sera documenté. |
-| Feu en 2026 | SDMIS (attendu) | presse | La presse ne sert qu'en l'absence du SDMIS (D-04) |
+| Feu en 2026 | SDMIS (attendu) | presse | La presse ne sert qu'en l'absence du SDMIS |
 | Surface d'un feu | BDIFF (`Surface parcourue`) | SDMIS | BDIFF : surface consolidée après la saison |
 | Commune et appartenance 69D / 69M | COG 2026 | libellés BDIFF | Le code COG fait foi. Le libellé BDIFF n'est jamais utilisé pour joindre. |
 

@@ -5,10 +5,6 @@ updated: 2026-11-17
 
 **Exercice 1 – De la commande aux données, partie B (individuelle)** · Projet feux-de-foret-auvergne-rhone-alpes
 
-> **Rectifications du 17/11** :
-> - mise au format du modèle : en-tête, 4 questions avec le test, tableau des termes à 3 colonnes, tableau des données par question ;
-> - les 9 questions de la v0 sont regroupées en 4. La question 8 (« les feux augmentent-ils ? ») et la question 9 (coût d'un feu) passent dans les besoins : la première ne change ni le lieu ni le seuil, la seconde est une donnée à demander. La question 7 (position nationale) est fusionnée avec la 6.
-
 Ce que j'ai compris de la commande : la direction doit décider **où** concentrer ses moyens et **à partir de quel niveau** de la Météo des forêts déclencher le dispositif renforcé, sachant que le budget ne permet pas de renforcer tout le département tout l'été.
 
 ## 1. Les questions

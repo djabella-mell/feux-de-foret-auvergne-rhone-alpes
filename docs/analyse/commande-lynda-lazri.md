@@ -5,11 +5,6 @@ updated: 2026-11-17
 
 **Projet :** saison des feux de forêt 2027, Auvergne-Rhône-Alpes. **Périmètre principal :** Rhône (69).
 
-> **Rectifications du 17/11** :
-> - fichier déplacé de la racine vers `docs/analyse/` (consigne, décision D-02) ;
-> - mise au format du modèle : 4 questions passant le test X → A / Y → B, tableau des termes à 3 colonnes, tableau des données avec grain, période, fraîcheur et emprise ;
-> - les 7 questions de la v0 sont regroupées (Q1 et Q7 → Q1 ; Q3, Q4 et Q5 → Q2 et Q3) ou passées en hypothèse de travail (Q2 sur les périodes, intégrée à Q3).
-
 ## 1. Les questions
 
 Quatre questions dont la réponse aiderait la direction à trancher.

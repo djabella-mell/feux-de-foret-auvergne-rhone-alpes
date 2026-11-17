@@ -26,7 +26,7 @@
 | Qualité | Usage dans le projet | Référentiel des jointures. 48 feux BDIFF ont un code absent du COG 2026 et tous sont retrouvés par les mouvements (MOD 32 « création de commune nouvelle » : 22 ; MOD 35 « suppression de commune déléguée » : 3). |
 | Gouvernance | Données personnelles | Aucune |
 | | Licence | **Non vérifiée** : la licence n'est pas affichée sur la page data.gouv.fr consultée, et les conditions de réutilisation d'insee.fr n'ont pas été lues. |
-| Lineage | Transformations | Aucune. Contrôle des codes BDIFF dans `src/profil_qualite.py` |
+| Lineage | Transformations | Aucune |
 | Besoin | Questions servies | Q1 (localiser), Q4 (rapporter à un territoire), et toutes les jointures |
 
 **Piège relevé :** joindre la BDIFF 2006 sur le COG 2026 sans table de passage fait perdre 1,2 % des feux de la région. Pour l'Ardèche (18 feux) et le Cantal (9 feux), ce ne sont pas des marges négligeables à l'échelle d'une commune.

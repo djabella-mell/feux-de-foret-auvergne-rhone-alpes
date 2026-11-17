@@ -28,11 +28,11 @@
 | Qualité | Complétude | `Nature` (cause) vide pour 53 % des feux de la région et pour 54 des 62 feux du Rhône. `Précision des surfaces` vide pour 49 %. `Type de peuplement` vide pour 53 %. |
 | | Complétude de la population | **Très hétérogène** : le Rhône compte 62 feux en 20 ans, dont 41 en 2015, et aucun feu pendant 11 des 20 années. L'Ardèche en compte 1 608. Le site signale aussi des « campagnes avec un nombre d'incendies inconnu » (par exemple 2025 pour les départements 75, 92, 93, 94 et 972). Probable sous-déclaration dans les départements hors zone méditerranéenne. |
 | | Cohérence | Surfaces toutes > 0. 56 noms de commune diffèrent du libellé COG 2026 pour des codes valides (accents, renommages). |
-| | Référentiel | 48 feux (25 codes) portent un code commune absent du COG 2026, à cause des fusions de 2019 à 2025. Les 25 codes sont retrouvés par la table des mouvements (D-07). |
+| | Référentiel | 48 feux (25 codes) portent un code commune absent du COG 2026, à cause des fusions de 2019 à 2025. Les 25 codes sont retrouvés par la table des mouvements. |
 | Gouvernance | Données personnelles | Aucune dans l'export (localisation à la commune). Le formulaire de saisie a été « rénové » : certaines données relèvent de l'ancienne version (avertissement en ligne 1). |
 | | Licence | **Pas une licence ouverte.** L'usage personnel, associatif ou professionnel est autorisé si l'on ne vend rien, si l'on ne modifie pas les données, si l'on cite `bdiff.agriculture.gouv.fr` et si l'on mentionne que les droits de reproduction sont réservés. Aucun usage commercial. |
-| | Conséquence | Données brutes et extraits ligne à ligne non versionnés dans le dépôt public (D-06) |
-| Lineage | Transformations | Aucune. Le profil lit le fichier à partir de la ligne d'en-tête (`src/profil_qualite.py`). |
+| | Conséquence | Les données brutes ne sont pas déposées dans le dépôt public |
+| Lineage | Transformations | Aucune |
 | Besoin | Questions servies | Q1 (où), Q2 (seuil, période commune 2024-2025), Q3 (profil des feux à niveau bas), Q4 (comparaison) |
 
 **À vérifier :** `Définitions.pdf` (définitions de forêt et des catégories de surface) n'a pas encore été relu. Les définitions ne sont donc pas reprises dans le glossaire.

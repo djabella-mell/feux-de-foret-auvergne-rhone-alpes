@@ -1,6 +1,6 @@
 # Profils de qualité v1 (17/11/2026)
 
-Responsable : Lynda LAZRI (qualité et conformité). Les chiffres viennent de [`profils-qualite-generes.md`](profils-qualite-generes.md), produit par `src/profil_qualite.py` sur les extractions du 17/11.
+Responsable : Lynda LAZRI (qualité et conformité). Profils établis sur les fichiers ouverts le 17/11/2026.
 
 Pour chaque source, on donne ce qui est fiable, ce qui ne l'est pas, et le verdict d'usage : **utilisable**, **utilisable avec réserve** ou **non utilisable** pour nos questions.
 
@@ -42,7 +42,7 @@ Pour chaque source, on donne ce qui est fiable, ce qui ne l'est pas, et le verdi
 | Complétude | 100 % hors `COMPARENT` (vide sauf pour les communes déléguées, ce qui est normal) | — |
 | Couverture | 266 communes dans le 69 : 208 dans le Rhône (69D), 58 dans la Métropole (69M) | Distinction possible |
 
-**Verdict : utilisable.** C'est le référentiel retenu (D-07).
+**Verdict : utilisable.** C'est le référentiel retenu.
 
 ## Sources non profilées
 

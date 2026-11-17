@@ -17,7 +17,7 @@ Responsable : Lynda LAZRI. Principe (RGPD art. 5.1.c) : on ne garde un champ que
 | Autres surfaces ventilées (9 colonnes) | ❌ | — | Aucune question ne les utilise ; ventilation incohérente pour 4 % des feux |
 | Précision des surfaces | ✅ | qualité | Indicateur de fiabilité de la surface |
 | Type de peuplement | 🔶 | Q3 | Gardé si Q3 l'exploite ; vide à 53 % |
-| Nature (cause) | 🔶 | Q3 | Jamais diffusée à la commune si moins de 3 feux (risque de ré-identification, voir [`rgpd.md`](../rgpd.md)) |
+| Nature (cause) | 🔶 | Q3 | Jamais diffusée à la commune si moins de 3 feux (risque de ré-identification) |
 | Décès, bâtiments détruits (4 colonnes) | ❌ | — | Ne sert ni le lieu ni le seuil ; information sensible sur des personnes |
 | Précision de la donnée | ✅ | qualité | Signale les fiches partielles |
 

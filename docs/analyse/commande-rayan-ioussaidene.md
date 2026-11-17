@@ -4,9 +4,6 @@ updated: 2026-11-17
 # Analyse de la commande - Rayan IOUSSAIDENE
 
 Groupe : Rayan IOUSSAIDENE, Melissa DJABELLA, Lynda LAZRI, Yakoub KEBAILI.
-Version longue (contexte, lecture critique, 38 sources) : rapport Word hors dépôt, disponible sur demande.
-
-> **Rectifications du 17/11** (après l'ouverture des fichiers BDIFF et COG) : la définition de « feu de forêt » au sens BDIFF n'est plus présentée comme vérifiée ; Q4 est précisée (« rapporté à la surface boisée »).
 
 ## 1. Les questions
 
@@ -85,19 +82,3 @@ Pour chaque question, la donnée qu'il vous faudrait idéalement pour répondre.
 | 2 | Niveau Météo des forêts prévu la veille (J+1) et l'avant-veille (J+2) + valeur IFM (par zone si possible), croisé avec feux et feux significatifs du jour | 1 jour × 1 échéance pour le 69 | 2024–2026 (niveau publié) ; 2006–2025 (IFM recalculé) | Archive annuelle ; quotidienne 17 h en exploitation | Département 69 (+ zones météo si accessibles) |
 | 3 | Fiche des feux significatifs à niveau 1–2 ou hors saison : végétation, cause/activité, heure, vent, humidité air/végétation, IEPx, type de jour | 1 feu avec conditions au lieu et à l'heure d'éclosion | 2024–2026, étendue à 2006–2025 | Après chaque saison (enquête causes) | Rhône, au point d'éclosion |
 | 4 | Panel tous départements : niveau quotidien, feux et feux significatifs, surfaces, végétation combustible, interface habitat-végétation, classement | 1 département × 1 jour de saison | 2024–2026 ; 2006–2025 en annuel | Annuelle | 12 dép. AuRA + 96 dép. métropolitains |
-
-Sources réelles identifiées : interventions SDMIS (interne), BDIFF, archives et API Météo des forêts (data.gouv.fr), SIM/SAFRAN, indices CEMS (Copernicus), vigilance archivée, BD Forêt, RPG, casernes SDMIS (data.grandlyon.com), statistiques DGSCGC.
-
-### Premier traitement (département 69)
-
-Archives Météo des forêts 2024–2026 filtrées sur le 69 : 371 bulletins. Chaque niveau est rattaché à son jour cible (date d'émission + 1).
-
-| Saison | Jours cibles | Faible | Modéré | Élevé | Très élevé |
-|---|---|---|---|---|---|
-| 2024 | 120 | 110 | 10 | 0 | 0 |
-| 2025 | 120 | 91 | 25 | 4 | 0 |
-| 2026 | 131 | 48 | 72 | 11 | 0 |
-
-- Six feux notables 2026 (presse) : 3 un jour « élevé » (Échalas 27/06, Mions–Corbas 09/07, Ronno 29/09), 3 un jour « modéré » (Saint-Laurent-de-Mure 01/07, sud-ouest de Lyon 04/09, Saint-Clément-sur-Valsonne 26/09), aucun un jour « faible ».
-- Seuil « élevé » en 2026 : 11 jours de renfort, 3 feux couverts ; seuil « modéré » : 83 jours, 6 feux. C'est illustratif (source presse), à refaire sur les données SDMIS.
-- Pièges de consolidation : séparateur `,` puis `;` en 2026 ; colonne `nom_dep`/`dep_nom` ; code département `1` vs `01` ; heure d'émission 16:00Z (2024) vs 14:50Z ; lignes non triées ; date = émission, pas jour cible.
