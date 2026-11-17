@@ -1,0 +1,13 @@
+# Données brutes : jamais versionnées (licence BDIFF, reproductibilité par procédure) — décision D-06
+data/raw/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+
+# Système
+.DS_Store
+Thumbs.db
+~$*
