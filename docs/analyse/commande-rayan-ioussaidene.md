@@ -1,10 +1,12 @@
 ---
-updated: 2026-11-16
+updated: 2026-11-17
 ---
 # Analyse de la commande - Rayan IOUSSAIDENE
 
 Groupe : Rayan IOUSSAIDENE, Melissa DJABELLA, Lynda LAZRI, Yakoub KEBAILI.
-Rapport complet (contexte, lecture critique, sources) : `Analyse_de_la_commande_Saison_feux_2027.docx`.
+Version longue (contexte, lecture critique, 38 sources) : rapport Word hors dépôt, disponible sur demande.
+
+> **Rectifications du 17/11** (après l'ouverture des fichiers BDIFF et COG) : la définition de « feu de forêt » au sens BDIFF n'est plus présentée comme vérifiée ; Q4 est précisée (« rapporté à la surface boisée »).
 
 ## 1. Les questions
 
@@ -41,7 +43,7 @@ Les mots de la commande que vous ne savez pas définir précisément, ou qui peu
 | Terme | Ce que je crois qu'il veut dire | Ce qu'il faudrait vérifier |
 |---|---|---|
 | SMDIS 69 / SDMIS | Coquille pour SDMIS, service départemental-métropolitain d'incendie et de secours (Rhône + Métropole de Lyon) | Que l'analyse couvre les deux territoires ; comment chaque source les découpe |
-| Feu de forêt | Feu touchant une surface boisée (BDIFF : ≥ 0,5 ha, couvert ≥ 10 %) | Le SDMIS compte des « feux de végétation » : forêt seule ou aussi chaumes, récoltes, broussailles ? |
+| Feu de forêt | Feu touchant une surface boisée. L'export BDIFF ventile la surface entre forêt, autres terres boisées et non boisé. | Définitions exactes dans `Définitions.pdf` (BDIFF), non relu. Le SDMIS compte-t-il aussi chaumes, récoltes et broussailles ? |
 | Départ de feu | Toute éclosion ayant donné lieu à une intervention | Feux éteints avant arrivée, reprises ; codes de nature d'intervention SDMIS |
 | Feu significatif (terme introduit) | Feu au-delà d'un seuil de taille ou de moyens | Seuil pertinent pour la direction (ha, engins, durée, enjeux touchés) |
 | Météo des forêts | Carte publique Météo-France, un niveau par département, 17 h, J+1/J+2, en saison | Seuil actuel basé sur la carte publique ou sur les produits opérationnels (IFM par zone météo, « sévère ») ? |
@@ -88,7 +90,7 @@ Sources réelles identifiées : interventions SDMIS (interne), BDIFF, archives e
 
 ### Premier traitement (département 69)
 
-Archives Météo des forêts 2024–2026 filtrées sur le 69 : 371 bulletins → `data/mdf_69_raw.csv`, `data/mdf_69_par_jour_cible.csv`.
+Archives Météo des forêts 2024–2026 filtrées sur le 69 : 371 bulletins. Chaque niveau est rattaché à son jour cible (date d'émission + 1).
 
 | Saison | Jours cibles | Faible | Modéré | Élevé | Très élevé |
 |---|---|---|---|---|---|
@@ -97,5 +99,5 @@ Archives Météo des forêts 2024–2026 filtrées sur le 69 : 371 bulletins →
 | 2026 | 131 | 48 | 72 | 11 | 0 |
 
 - Six feux notables 2026 (presse) : 3 un jour « élevé » (Échalas 27/06, Mions–Corbas 09/07, Ronno 29/09), 3 un jour « modéré » (Saint-Laurent-de-Mure 01/07, sud-ouest de Lyon 04/09, Saint-Clément-sur-Valsonne 26/09), aucun un jour « faible ».
-- Seuil « élevé » en 2026 : 11 jours de renfort, 3 feux couverts ; seuil « modéré » : 83 jours, 6 feux. Illustratif, à refaire sur les données SDMIS/BDIFF.
+- Seuil « élevé » en 2026 : 11 jours de renfort, 3 feux couverts ; seuil « modéré » : 83 jours, 6 feux. C'est illustratif (source presse), à refaire sur les données SDMIS.
 - Pièges de consolidation : séparateur `,` puis `;` en 2026 ; colonne `nom_dep`/`dep_nom` ; code département `1` vs `01` ; heure d'émission 16:00Z (2024) vs 14:50Z ; lignes non triées ; date = émission, pas jour cible.

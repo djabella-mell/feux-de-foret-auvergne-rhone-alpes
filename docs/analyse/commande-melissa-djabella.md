@@ -1,109 +1,78 @@
-# Analyse de la commande – Saison feux 2027 (SDMIS 69)
+---
+updated: 2026-11-17
+---
+# Analyse de la commande - Melissa DJABELLA
 
-**Exercice 1 – De la commande aux données, partie B (individuelle)**
-**Nom :** Melissa DJABELLA
-**Projet :** feux-de-foret-auvergne-rhone-alpes
-**Module :** Modélisation et Pipeline de données (EU01) – MD5
-**Date :** 16/11/2026
+**Exercice 1 – De la commande aux données, partie B (individuelle)** · Projet feux-de-foret-auvergne-rhone-alpes
+
+> **Rectifications du 17/11** :
+> - mise au format du modèle : en-tête, 4 questions avec le test, tableau des termes à 3 colonnes, tableau des données par question ;
+> - les 9 questions de la v0 sont regroupées en 4. La question 8 (« les feux augmentent-ils ? ») et la question 9 (coût d'un feu) passent dans les besoins : la première ne change ni le lieu ni le seuil, la seconde est une donnée à demander. La question 7 (position nationale) est fusionnée avec la 6.
+
+Ce que j'ai compris de la commande : la direction doit décider **où** concentrer ses moyens et **à partir de quel niveau** de la Météo des forêts déclencher le dispositif renforcé, sachant que le budget ne permet pas de renforcer tout le département tout l'été.
 
 ## 1. Les questions
 
-Ce que j'ai compris de la commande : la direction du SDMIS doit prendre deux décisions. D'abord, où concentrer ses moyens humains et financiers pour lutter contre les départs de feu. Ensuite, à partir de quel niveau de l'indice Météo des forêts déclencher le dispositif renforcé, sachant que le budget ne permet pas de renforcer tout le département pendant tout l'été.
+Quatre questions dont la réponse aiderait la direction à trancher.
 
-Voici les questions que je me pose, chacune avec la décision qu'elle permettrait de prendre.
+> [!test] Test
+> Le test : si la réponse est X, la direction fait A ; si elle est Y, elle fait B. Si A et B sont identiques, ce n'est pas une question analytique pertinente.
 
-1. **Où se passent vraiment les départs de feu dans le Rhône ?** Quelles communes ou zones sont les plus touchées, pas seulement en nombre de feux mais aussi en gravité ? Ça permettrait de décider où envoyer les patrouilles, le guet et le budget.
+1. **Où se passent vraiment les départs de feu dans le Rhône, en nombre et en gravité ?**
+   - Les feux graves se concentrent dans quelques communes → la direction y envoie patrouilles, guet et budget.
+   - Les départs sont nombreux ailleurs que là où les feux deviennent graves → prévention là où ils démarrent, moyens de lutte là où ils grossissent.
+2. **Combien de fois l'indice « se trompe »-t-il, selon le seuil choisi ?** Pour chaque seuil possible : combien de jours annoncés à risque sans feu, et combien de feux partis sous le seuil ?
+   - Un seuil limite les deux erreurs → la direction l'adopte.
+   - Baisser le seuil multiplie les jours sans feu pour peu de feux en plus → elle garde le seuil haut et traite les feux restants autrement.
+3. **À quels moments les feux partent-ils (mois, jour, heure), et d'où viennent-ils (cause, lisière, bord de route) ?**
+   - Ils se concentrent sur des créneaux précis → renfort seulement sur ces créneaux.
+   - Ils sont surtout d'origine humaine, près des routes ou des zones de loisirs → prévention et sensibilisation plutôt que guet.
+4. **L'indice se comporte-t-il pareil dans le Rhône, dans les autres départements de la région et en France ?**
+   - Non : le Rhône est plus souvent à risque, ou il a plus de feux à niveau égal → seuil propre au Rhône.
+   - Oui → seuil aligné sur ses voisins, et le niveau de moyens se justifie par la comparaison.
 
-2. **À partir de quelle valeur de l'indice le risque de feu grimpe-t-il vraiment chez nous ?** C'est la base pour fixer un nouveau seuil de déclenchement du dispositif renforcé.
-
-3. **Combien de fois l'indice se trompe-t-il ?** Combien de jours il annonce un danger élevé sans aucun feu, et combien de feux partent un jour où il est au plus bas ? Ça permettrait de choisir le seuil qui fait le meilleur compromis entre dépenser pour rien et ne pas être prêt.
-
-4. **À quels moments de l'été les feux partent-ils ?** En juillet-août, en semaine, en fin d'après-midi ? Ça aiderait à renforcer seulement aux bonnes périodes, puisque le budget ne permet pas de tenir tout l'été.
-
-5. **D'où viennent les feux ?** Cause humaine ou naturelle, bords de route, lisières, zones de loisirs ? Selon la réponse, mieux vaut miser sur la prévention, le guet ou les patrouilles.
-
-6. **L'indice se comporte-t-il pareil dans le Rhône et dans les autres départements de la région ?** Si non, un seuil unique n'a pas beaucoup de sens.
-
-7. **Par rapport au reste de la France, où se situe le Rhône ?** Ça servirait à justifier le niveau de moyens demandé.
-
-8. **Est-ce que les feux augmentent vraiment d'année en année ?** La direction part du principe que 2027 sera comme 2026 ou pire : il faut vérifier si les chiffres le confirment avant de dimensionner le budget.
-
-9. **Combien coûte un feu au SDMIS, en effectifs, engins et temps passé ?** Sans ça, impossible de savoir ce qu'un renforcement permet de financer.
-
-J'ai écarté des questions comme « combien de feux en France ? » ou « quel est l'indice moyen ? » : quelle que soit la réponse, la direction ne ferait rien de différent.
+J'ai écarté « combien de feux en France ? » et « quel est l'indice moyen ? » : quelle que soit la réponse, la direction ne ferait rien de différent.
 
 ## 2. Les termes inconnus
 
-Ce sont des définitions provisoires, à vérifier et à compléter dans le glossaire du groupe.
+Les mots de la commande que vous ne savez pas définir précisément, ou qui peuvent se comprendre de plusieurs façons.
 
-- **SDMIS** : le service d'incendie et de secours du Rhône, c'est-à-dire le commanditaire.
-- **Météo des forêts** : l'indice quotidien de danger de feu de forêt publié par Météo-France. Je dois encore vérifier comment il est calculé, quels sont ses niveaux, à quelle maille géographique il existe et quel historique est disponible.
-- **Indice et seuil** : le seuil est la valeur à partir de laquelle on change de niveau de danger. Je ne connais pas le seuil actuel du SDMIS.
-- **Dispositif renforcé** : patrouilles, guet, etc. Je ne sais pas quels moyens exacts cela recouvre ni combien cela coûte par jour : à demander au SDMIS.
-- **Départ de feu** : le début d'un feu détecté et signalé. À clarifier : à partir de quelle surface on le compte, et si on parle uniquement de feux de forêt ou aussi de végétation et de feux agricoles.
-- **Fausse alerte** : indice élevé mais aucun feu. **Feu manqué** : feu qui part un jour d'indice bas. En vocabulaire data, ce sont des faux positifs et des faux négatifs.
-- **Grain** : le niveau de détail d'une ligne de données (un feu, un jour, une commune…).
-- **Emprise** : la zone géographique couverte par une donnée.
-- **Fraîcheur** : le délai entre l'événement et le moment où la donnée est disponible.
-- **Maille** : le carreau ou la zone sur lesquels une donnée météo est calculée.
-- **Chef de centre** : le responsable d'un centre d'incendie et de secours, une source d'information terrain.
-- **Base nationale des feux de forêt** : la base publique qui recense les feux. Je dois confirmer son nom exact et son contenu.
-- **Occupation du sol et lisière** : la nature de la surface (forêt, prairie, bâti) et la frontière entre la forêt et les zones habitées.
+| Terme | Ce que je crois qu'il veut dire | Ce qu'il faudrait vérifier |
+|---|---|---|
+| SDMIS | Le service d'incendie et de secours du Rhône, commanditaire | Couvre-t-il aussi la Métropole de Lyon ? (Oui : 69D et 69M dans le COG.) |
+| Météo des forêts | Indice quotidien de danger de feu publié par Météo-France | Calcul, niveaux, maille, historique disponible |
+| Indice et seuil | Le seuil est le niveau à partir duquel on change de dispositif | Le seuil actuel du SDMIS |
+| Dispositif renforcé | Patrouilles, guet, etc. | Moyens exacts et coût par jour : à demander |
+| Départ de feu | Début d'un feu détecté et signalé | Surface minimale ; feux agricoles inclus ou non |
+| Fausse alerte / feu manqué | Faux positif / faux négatif | Un jour « élevé » sans feu n'est pas forcément une erreur de l'indice |
+| Fraîcheur | Délai entre l'événement et la disponibilité de la donnée | Pour la BDIFF : l'année N-1 seulement |
+| Maille | Zone sur laquelle une donnée météo est calculée | Météo des forêts : le département |
+| Base nationale des feux de forêt | Base publique qui recense les feux | Nom exact : BDIFF (bdiff.agriculture.gouv.fr) ; contenu vérifié le 17/11 |
+| Occupation du sol, lisière | Nature de la surface, frontière forêt-habitat | Source : BD Forêt V2 (IGN) |
 
 ## 3. Les besoins
 
-Pour répondre à la commande, j'ai besoin de six choses :
+La décision à éclairer, en une phrase : fixer pour 2027 les secteurs prioritaires et le niveau de la Météo des forêts qui déclenche le dispositif renforcé, dans le budget disponible.
 
-- Savoir où et quand les feux sont partis, et leur gravité (questions 1, 4, 5 et 8).
-- Connaître l'indice jour par jour, sur la même géographie que les feux (questions 2 et 3).
-- Relier les deux par la date et le lieu, pour calculer pour chaque seuil possible les fausses alertes et les feux manqués (questions 2, 3 et 6).
-- Refaire la même analyse sur les autres départements de la région et sur la France entière, pour comparer (questions 6 et 7).
-- Connaître les moyens engagés sur chaque feu, pour traduire un seuil en budget (question 9).
-- Avoir du contexte (occupation du sol, relief, lisières) pour comprendre pourquoi certaines zones brûlent plus que d'autres (questions 1 et 5).
-
-À la fin, la direction attend un seuil recommandé et argumenté, une liste ou une carte des zones prioritaires, et une comparaison régionale et nationale, pour le 11 décembre.
+Ce qui manque dans la commande pour y répondre (une information, une précision, une hypothèse à confirmer) :
+- Le coût d'un feu et d'une journée de renforcement pour le SDMIS (effectifs, engins, temps passé) : sans lui, impossible de traduire un seuil en budget.
+- Le seuil actuel et ce que recouvre le « dispositif renforcé ».
+- Une vérification de l'hypothèse « 2027 comme 2026 ou pire » : la tendance du nombre de feux sur plusieurs années.
+- Les interventions du SDMIS, pour l'été 2026 que la base nationale ne couvre pas encore.
+- Le contexte du terrain (occupation du sol, lisières) pour comprendre pourquoi certaines zones brûlent plus.
 
 ## 4. Les données
 
-Pour chaque besoin, voici la donnée idéale avec son grain, sa période, sa fraîcheur et son emprise. Les sources sont des pistes à valider dans l'inventaire du groupe.
+Pour chaque question, la donnée qu'il vous faudrait idéalement pour répondre.
 
-**Les départs de feu** (questions 1, 4, 5, 7 et 8)
-- Contenu : date, heure, commune ou coordonnées, surface brûlée, cause, type de végétation.
-- Grain : une ligne par départ de feu.
-- Période : 15 à 20 ans, jusqu'à l'été 2026 compris.
-- Fraîcheur : la saison précédente complète.
-- Emprise : France entière pour comparer, avec le détail du Rhône et de la région.
-- Source envisagée : la base nationale des feux de forêt, plus les données internes du SDMIS.
-
-**L'indice Météo des forêts** (questions 2, 3, 6 et 7)
-- Grain : une ligne par zone et par jour.
-- Période : la même que pour les feux, au moins sur les saisons estivales.
-- Fraîcheur : quotidienne, avec l'historique complet.
-- Emprise : France entière.
-- Source envisagée : Météo-France (données publiques).
-
-**Les interventions du SDMIS** (questions 3 et 9)
-- Contenu : horaires, effectifs, engins, durée.
-- Grain : une ligne par intervention.
-- Période : au moins 5 ans, été 2026 inclus.
-- Emprise : le Rhône.
-- Source envisagée : le SDMIS, à lui demander.
-
-**Le contexte du terrain** (questions 1 et 5)
-- Contenu : occupation du sol, relief, lisières entre forêt et habitat.
-- Grain : un polygone ou un carreau, qu'on pourra croiser avec les communes.
-- Période : la dernière version disponible, ça évolue lentement.
-- Emprise : la région.
-- Source envisagée : les données publiques d'occupation du sol et de relief.
-
-**Le référentiel des communes et départements** (toutes les questions)
-- Grain : une ligne par commune.
-- Période : version à jour, mise à jour une fois par an.
-- Emprise : France.
-- Source envisagée : le référentiel officiel des communes.
+| Question | Donnée idéale | Grain (une ligne = ?) | Période | Fraîcheur | Emprise géographique |
+|---|---|---|---|---|---|
+| 1 | Départs de feu : date, heure, commune, surface, cause, végétation ; occupation du sol | 1 feu ; 1 polygone de végétation | 15 à 20 ans, jusqu'à l'été 2026 | Saison précédente complète | Rhône (détail), région |
+| 2 | Niveau Météo des forêts jour par jour + calendrier complet, jours sans feu compris | 1 département × 1 jour | Période commune avec les feux | Quotidienne | Rhône, région |
+| 3 | Départs de feu horodatés avec cause ; interventions SDMIS (horaires, engins, durée) | 1 feu ; 1 intervention | Au moins 5 ans, 2026 inclus | Saison précédente | Rhône |
+| 4 | Niveaux quotidiens et feux de tous les départements ; surface boisée | 1 département × 1 jour | Période commune | Quotidienne / annuelle | Région et France |
 
 **Points de vigilance**
-- Les feux non signalés ou éteints par des particuliers n'apparaissent pas : le nombre de feux est probablement sous-estimé.
-- Si l'indice n'est pas à la même maille que les communes, il faudra définir une règle de rapprochement et la noter dans le journal des décisions.
-- Les coordonnées précises ou adresses éventuelles sont à manier avec précaution (par exemple en agrégeant à la commune). À valider avec la personne responsable qualité et conformité.
-- Pour calculer un seuil, il faut aussi les jours **sans feu** : l'historique complet des jours d'été est nécessaire, pas seulement ceux où un feu est parti.
+- Les feux non signalés n'apparaissent pas : le nombre de feux est sous-estimé. C'est confirmé le 17/11, le Rhône ne compte que 62 feux dans la BDIFF en 20 ans.
+- Pour calculer un seuil, il faut aussi les jours **sans** feu.
+- Les coordonnées précises sont à éviter (agrégation à la commune), à valider avec la responsable qualité et conformité.
