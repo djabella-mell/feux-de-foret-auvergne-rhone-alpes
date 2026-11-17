@@ -73,7 +73,7 @@ Chaque question est reliée à une décision. Une question qui ne change rien à
 | **Rappel / précision** | Part des feux couverts par l'alerte / part des alertes suivies d'un feu | Métriques pour comparer les seuils |
 | **Zone Naturelle-Urbaine (interface forêt-habitat), lisière** | Zone où habitations et végétation se touchent | Facteur d'enjeu (Q2) |
 | **Maille / zonage** | Découpage du territoire utilisé pour publier l'indice | Peut ne pas coïncider avec les communes ou le périmètre du SDMIS |
-| **Titre RNCP** | Certification professionnelle visée par la formation | Contexte de l'évaluation (gestion de projet, traçabilité) |
+
 
 ---
 
