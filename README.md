@@ -19,3 +19,4 @@ Projet MD5 · UE01.A Modélisation et pipelines de données · HETIC 2026-2027
 - `docs/analyse/` : analyses individuelles de la commande
 - `docs/glossaire.md` : glossaire du projet
 - `docs/sources/` : dossier de sources v1 (fiches d'identité, inventaire, matrice questions × sources, profils de qualité, tableau de minimisation, décision face au manque)
+- `docs/modele/` : modèle de données cible v1 (couches bronze et silver, consolidation multi-sources) et règles de qualité du pipeline
