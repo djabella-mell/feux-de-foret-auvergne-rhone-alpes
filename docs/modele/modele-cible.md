@@ -1,22 +1,24 @@
-# Modèle de données cible v1 (18/11/2026)
+# Modèle de données cible et entrepôt v1 (18/11/2026)
 
 - **Responsable :** Yakoub KEBAILI (pipeline et modèle) · **Relecture :** Melissa DJABELLA (cheffe de projet), Lynda LAZRI (qualité et conformité)
-- **Périmètre :** étapes 6 et 7 du cadrage (extraction en couches, consolidation multi-sources). Le document couvre les couches **bronze** et **silver**. La couche **gold** (étoile, historisation, self-service) est seulement située ici : elle se conçoit en S4 et S5 (étapes 8 et 9).
-- **Sources modélisées :** Météo des forêts 2024-2026, BDIFF Auvergne-Rhône-Alpes 2006-2025, COG 2026. Les chiffres cités ont été mesurés sur les fichiers extraits le 17/11/2026.
-- **Règles de qualité et contrôles :** voir [regles-qualite.md](regles-qualite.md).
+- **Périmètre :** étapes 6 et 7 du cadrage (extraction en couches, consolidation multi-sources). Les couches **bronze** et **silver** sont construites. La couche **gold** (étoile, historisation, self-service) est seulement située : elle se conçoit en S4 et S5 (étapes 8 et 9).
+- **La base :** un seul fichier DuckDB, `data/entrepot/feux_de_foret.duckdb` (1 028 Mo), qui regroupe les cinq sources téléchargées. Il est construit par `pipeline/construire_entrepot.py` à partir des silos `data/bronze/`. Les données ne sont pas dans Git (section 6).
+- **Règles de qualité et résultats :** voir [regles-qualite.md](regles-qualite.md).
 
 ## 1. Vue d'ensemble
 
 ```mermaid
 flowchart LR
-  subgraph SRC["Sources"]
-    MDF["Météo des forêts<br/>csv.gz par année"]
-    BDIFF["BDIFF<br/>zip : CSV + PDF"]
-    COG["COG 2026<br/>CSV"]
+  subgraph SRC["Sources (extraites le 18/11/2026)"]
+    MDF["Météo des forêts<br/>csv.gz + geojson"]
+    BDIFF["BDIFF<br/>18 zips régionaux"]
+    COG["COG 2026<br/>15 CSV"]
+    BDF["BD Forêt V2<br/>12 départements, SHP"]
+    AE["ADMIN EXPRESS COG 2026<br/>GeoPackage"]
   end
   subgraph BRONZE["Bronze"]
-    SILO["Silos de fichiers<br/>format d'origine, datés"]
-    RAW["raw.*<br/>tables texte + traçabilité"]
+    SILO["data/bronze<br/>fichiers d'origine, datés"]
+    RAW["raw.*<br/>contenu tel quel + traçabilité"]
     JOURNAL["raw._journal_chargement"]
   end
   subgraph SILVER["Silver"]
@@ -27,24 +29,28 @@ flowchart LR
   subgraph GOLD["Gold, S4-S5"]
     MARTS["marts.*<br/>étoile, self-service"]
   end
+  QUAL["qualite.resultats_tests"]
   MDF --> SILO
   BDIFF --> SILO
   COG --> SILO
-  SILO --> RAW
-  RAW --> STG
-  STG --> INT
-  INT --> MARTS
+  BDF --> SILO
+  AE --> SILO
+  SILO --> RAW --> STG --> INT --> MARTS
   RAW -.-> JOURNAL
   INT -.-> REJ
+  RAW -.-> QUAL
+  STG -.-> QUAL
+  INT -.-> QUAL
 ```
 
-| Médaillon | Couche | Où | Rôle | Qui lit |
+| Médaillon | Couche | Où | Rôle | Tables |
 |---|---|---|---|---|
-| Bronze | Silos | dossiers datés hors Git (ou bucket MinIO) | Fichiers tels que collectés, jamais modifiés | Pipeline |
-| Bronze | Raw | schéma `raw` | Contenu des fichiers chargé tel quel (texte), avec sa provenance | Pipeline, responsable qualité |
-| Silver | Staging | schéma `staging` | Une source à la fois : typer, renommer, normaliser, dédoublonner, minimiser | Équipe data |
-| Silver | Intermédiaire | schéma `intermediate` | Correspondances, jointures entre sources, règles métier | Équipe data |
-| Gold | Marts | schéma `marts` | Faits et dimensions pour les questions Q1 à Q4 (S4) | Utilisateurs (self-service) |
+| Bronze | Silos | `data/bronze/<source>/<extraction>/` | Fichiers tels que collectés, jamais modifiés, avec `SHA256SUMS.txt` | 40 fichiers, 798 Mo |
+| Bronze | Raw | schéma `raw` | Contenu des fichiers en texte (géométries en WKB), avec sa provenance | 25 + journal + rejets |
+| Silver | Staging | schéma `staging` | Une source à la fois : typer, renommer, normaliser, dédoublonner, minimiser | 11 tables + 2 vues |
+| Silver | Intermédiaire | schéma `intermediate` | Correspondances, jointures entre sources, règles métier | 9 |
+| Qualité | — | schéma `qualite` | Résultat de chaque règle à chaque exécution | 1 (+ exécution courante) |
+| Gold | Marts | schéma `marts` | Faits et dimensions pour Q1 à Q4 (S4) | — |
 
 Trois règles s'appliquent à toutes les couches :
 1. Raw ne transforme rien.
@@ -53,104 +59,58 @@ Trois règles s'appliquent à toutes les couches :
 
 ## 2. Bronze
 
-### 2.1 Silos de fichiers
+### 2.1 Silos
 
-Chaque extraction est déposée dans un dossier daté, au format de collecte. Un dossier n'est jamais écrasé : on peut rejouer n'importe quel chargement passé. Les silos restent **hors du dépôt Git** : la licence BDIFF interdit de redistribuer les données, et Git n'est pas fait pour stocker des données.
+Chaque extraction est déposée dans un dossier daté, au format de collecte. Un dossier n'est jamais écrasé, ce qui permet de rejouer n'importe quel chargement passé. Le script lit le dossier le plus récent de chaque source.
 
-| Source | Silo | Fichiers déposés tels quels | Extraction | Fréquence |
-|---|---|---|---|---|
-| Météo des forêts | `bronze/meteo_des_forets/<date_extraction>/` | `mdf_2024.csv.gz`, `mdf_2025.csv.gz`, `mdf_2026.csv.gz` | Complète | Quotidienne en saison (le fichier de l'année est réécrit), annuelle sinon |
-| BDIFF | `bronze/bdiff/<date_extraction>/` | Zip du formulaire : `Incendies.csv`, `Mention légales.pdf`, `Définitions.pdf` | Complète, par région | Annuelle (année N-1) |
-| COG | `bronze/cog/2026/` | `v_commune_2026.csv`, `v_mvt_commune_2026.csv`, `v_departement_2026.csv` | Complète | Annuelle (millésime) |
-| BD Forêt V2 | `bronze/bd_foret_v2/69/` | Format non vérifié (Shapefile attendu) | Non faite | Pas de mise à jour régulière |
-| Interventions SDMIS | `bronze/sdmis/` | Fichier demandé, non reçu | — | — |
+| Source | Silo | Contenu | Remarque |
+|---|---|---|---|
+| Météo des forêts | `meteo_des_forets/2026-11-18/` | `mdf_2024.csv.gz` à `mdf_2026.csv.gz`, contours des 96 départements (geojson), exemple d'une journée et PDF de présentation | Toutes les ressources du jeu data.gouv.fr |
+| BDIFF | `bdiff/2026-11-18/` | 18 zips (13 régions de métropole et 5 d'outre-mer), feux 2006-2025, chacun avec `Incendies.csv`, `Mention légales.pdf` et `Définitions.pdf` | Extraction par région : le serveur garde la sélection en session et l'extraction nationale échoue |
+| COG | `cog/2026/` | `cog_ensemble_2026_csv.zip` : les 15 fichiers du millésime, communes depuis 1943 comprises | National |
+| BD Forêt V2 | `bd_foret_v2/2026-11-18/` | 12 archives 7z, une par département d'Auvergne-Rhône-Alpes, + `md5_ign.txt` | md5 IGN vérifiés |
+| ADMIN EXPRESS COG | `admin_express_cog/2026/` | Édition 2026, métropole, Lambert 93, pleine précision (GeoPackage 7z) | Contours des communes pour le géotraitement |
+| Interventions SDMIS | — | Demandé, non reçu | Le modèle est prêt à l'accueillir (4.5) |
 
-**Pourquoi une extraction complète :** les volumes sont petits (35 616 lignes pour la Météo des forêts, 4 072 pour la BDIFF, 37 496 pour les communes du COG national). Aucune source ne fournit de marqueur de modification fiable. Le fichier Météo des forêts de l'année en cours est réécrit chaque jour. Le mode incrémental n'apporterait que ses angles morts : modifications rétroactives, arrivées tardives, suppressions.
+**Extraction complète** pour toutes les sources : les volumes sont petits et aucune source ne fournit de marqueur de modification fiable.
 
-### 2.2 Tables raw
+### 2.2 Raw
 
-Une table par source logique. Toutes les colonnes sont en texte, avec les noms d'origine et les valeurs inchangées. Cinq colonnes techniques sont ajoutées à chaque ligne : `_id_chargement`, `_fichier_source`, `_empreinte_fichier` (SHA-256), `_ligne_source`, `_date_chargement`.
+Toutes les colonnes sont en texte, avec les noms et les valeurs d'origine. Les géométries sont stockées telles que livrées, en WKB (`geometrie_wkb`, Lambert 93). Chaque ligne porte six colonnes de traçabilité : `_id_chargement`, `_fichier_source`, `_fichier_logique`, `_empreinte_fichier` (SHA-256), `_ligne_source`, `_date_chargement`.
 
-| Table | Contenu | Particularité de lecture |
+| Tables | Lignes | Particularité |
 |---|---|---|
-| `raw.mdf_bulletins` | Les 3 fichiers annuels | Séparateur `,` en 2024-2025 et `;` en 2026. La colonne du libellé s'appelle `nom_dep` en 2024 et `dep_nom` en 2025-2026 : les deux colonnes existent, chaque fichier remplit la sienne. |
-| `raw.bdiff_incendies` | Les 24 colonnes de `Incendies.csv` | Les 3 premières lignes sont des métadonnées. Elles ne vont pas dans la table, mais le nombre d'incendies annoncé (4 072) et les critères de sélection sont écrits au journal. |
-| `raw.cog_communes` | `v_commune_2026.csv` | — |
-| `raw.cog_mouvements` | `v_mvt_commune_2026.csv` | — |
-| `raw.cog_departements` | `v_departement_2026.csv` | 101 départements, dont 5 en outre-mer |
+| `mdf_bulletins`, `mdf_departements_geo` | 35 616 ; 96 | Séparateur `,` ou `;` détecté par fichier ; `nom_dep` et `dep_nom` coexistent |
+| `bdiff_incendies`, `bdiff_notes_campagnes` | 52 811 ; 2 | Ligne d'en-tête repérée (2, 3 ou 6 lignes de métadonnées selon le fichier). Les notes « A noter » de la source (Pyrénées-Atlantiques : 2010 données perdues, 2011 aucune donnée) sont gardées. |
+| `cog_*` (15 tables) | 37 496 communes, 13 734 mouvements… | Tous les fichiers du millésime |
+| `bd_foret_formations`, `bd_foret_metadonnees` | 230 127 polygones ; 12 | Dates de la réalité décrite lues dans les métadonnées XML |
+| `admin_express_commune`, `_departement`, `_region`, `_arrondissement_municipal` | 34 746 ; 96 ; 13 ; 45 | Avec population et géométrie |
+| `_journal_chargement`, `_rejets_chargement` | — | Une ligne par fichier traité, succès compris ; lignes illisibles avec leur motif |
 
-`raw.bdiff_incendies` contient encore les colonnes décès et bâtiments, qui sont des informations sensibles sur des personnes. L'accès à la couche raw est donc réservé au pipeline et à la responsable qualité. Ces colonnes disparaissent en staging (section 5).
+`raw.bdiff_incendies` contient encore les colonnes décès et bâtiments, qui sont des informations sensibles. Elles disparaissent en staging (section 5).
 
-### 2.3 Journal de chargement
+### 2.3 Idempotence et journal
 
-`raw._journal_chargement` contient une ligne par fichier traité, succès compris.
-
-| Colonne | Contenu |
-|---|---|
-| `id_chargement`, `source`, `fichier` | Identification |
-| `empreinte_sha256`, `taille_octets` | Reconnaître un fichier déjà chargé, même renommé |
-| `lignes_annoncees` | Nombre déclaré par la source (BDIFF : ligne 2 du fichier) |
-| `lignes_lues`, `lignes_inserees`, `lignes_rejetees` | Réconciliation : lues = insérées + rejetées |
-| `debut`, `fin`, `statut`, `message` | Statut : succès, échec ou ignoré (déjà chargé), avec le message d'erreur |
-
-Deux règles :
-- une empreinte déjà présente au journal fait ignorer le fichier ;
-- un succès qui insère 0 ligne déclenche une alerte.
-
-### 2.4 Idempotence
-
-Un chargement rejoué ne doit rien doubler. Pour cela :
-- **Remplacement par fichier**, dans une transaction : on supprime de la table raw les lignes du même `_fichier_source`, puis on les réinsère.
-- **Dédoublonnage en staging**, en seconde garde : une seule ligne par clé naturelle, la plus récemment chargée.
-
-La preuve se fait en comptant : charger, compter, recharger les mêmes fichiers, recompter. Les nombres attendus sont 35 616 lignes pour la Météo des forêts et 4 072 pour la BDIFF ; pour le COG, le nombre de lignes du fichier (test Q-PIP-01).
+- Un fichier dont l'empreinte est déjà au journal avec le statut « succès » est **ignoré**.
+- Un fichier rechargé **remplace ses propres lignes**, repérées par `_fichier_logique`, dans une transaction.
+- Le staging garde une ligne par clé naturelle, la plus récemment chargée.
+- **Preuve (Q-PIP-01) :** l'option `--idempotence` recharge tout une seconde fois en forçant, puis compare les comptes des 25 tables raw. Résultat au 18/11 : aucun écart. Une exécution normale relancée ignore les 83 chargements déjà faits.
 
 ## 3. Silver : staging
 
-Une source à la fois. On type, on renomme en `snake_case` français, on harmonise les formats, on dédoublonne et on supprime les champs écartés par le [tableau de minimisation](../sources/minimisation.md). Aucune jointure, aucune règle métier.
+| Table | Grain, clé | Ce qui est fait |
+|---|---|---|
+| `stg_mdf__bulletins` | Département × bulletin émis ; (`code_departement`, `date_emission`) | Code complété à 2 caractères ; horodatage UTC ; date d'émission à l'heure de Paris ; niveaux en entier |
+| `stg_bdiff__feux` | Un feu ; `id_feu_bdiff` (`Année-Numéro`) | Types, noms en français ; libellé du type de peuplement (ordre de `Définitions.pdf`) ; dédoublonnage. Écartés : libellé de commune, 8 surfaces ventilées, 4 colonnes décès et bâtiments. |
+| `stg_bdiff__notes_campagnes` | Département × année signalé par la source | — |
+| `stg_cog__codes_commune`, `stg_cog__communes` | Tous les types de code ; communes (`TYPECOM = COM`) | `code_ctcd` distingue 69D et 69M |
+| `stg_cog__departements`, `stg_cog__regions`, `stg_cog__mouvements` | — | — |
+| `stg_admin_express__communes` | Une commune | Population et date du recensement |
+| `stg_bd_foret__formations` | Un polygone ; `id_formation` | Catégorie : **forêt** (codes FF, FO, FP), **lande**, **formation herbacée** |
+| `stg_bd_foret__metadonnees` | Un département | Édition, début et fin de la réalité décrite |
+| `stg_bd_foret__geometries`, `stg_admin_express__geometries_communes` | **Vues** sur raw | Les géométries (1,5 Go) ne sont pas recopiées |
 
-### 3.1 `staging.stg_mdf__bulletins`
-
-**Grain :** un département × un bulletin émis. **Clé :** (`code_departement`, `date_emission`). **Lignes attendues :** 35 616.
-
-| Colonne | Type | Origine | Transformation |
-|---|---|---|---|
-| `code_departement` | texte (2) | `num_dep` | Complété à 2 caractères (`1` devient `01`). `2A` et `2B` sont inchangés. |
-| `horodatage_emission_utc` | horodatage UTC | `date` | Lu en ISO 8601 (`Z` = UTC) |
-| `date_emission` | date | `date` | Date en heure de Paris |
-| `niveau_j1`, `niveau_j2` | entier (1 à 4) | `niveau_j1`, `niveau_j2` | Conversion de type |
-| `millesime_fichier` | entier | nom du fichier | 2024, 2025 ou 2026 |
-
-**Écartés :** `nom_dep` et `dep_nom`. Le libellé du COG fait foi.
-
-### 3.2 `staging.stg_bdiff__feux`
-
-**Grain :** un feu. **Clé :** `id_feu_bdiff` (`Année`-`Numéro`, par exemple `2006-5296`). **Lignes attendues :** 4 072.
-
-| Colonne | Type | Origine | Transformation |
-|---|---|---|---|
-| `id_feu_bdiff` | texte | `Année`, `Numéro` | Concaténation |
-| `annee`, `numero_fiche` | entier | `Année`, `Numéro` | Conversion de type |
-| `code_departement` | texte (2) | `Département` | — |
-| `code_commune_origine` | texte (5) | `Code INSEE` | Gardé tel que saisi : c'est le code de l'année du feu, pas forcément celui du COG 2026 |
-| `horodatage_alerte` | horodatage sans fuseau | `Date de première alerte` | Heure légale française supposée, **non vérifiée** (`Définitions.pdf` pas encore relu) |
-| `date_alerte` | date | `Date de première alerte` | Partie date |
-| `surface_parcourue_m2` | entier | `Surface parcourue (m2)` | Unité gardée : m² |
-| `surface_foret_m2` | entier | `Surface forêt (m2)` | Vide gardé vide (316 feux) : un vide n'est pas un 0 |
-| `precision_surfaces` | texte | `Précision des surfaces` | Valeurs : Estimées, Mesurées, vide |
-| `type_peuplement_code` | texte | `Type de peuplement` | Codes 1 à 6, libellés **non vérifiés** |
-| `cause_nature` | texte | `Nature` | 5 valeurs. Gardé sous condition (voir minimisation). |
-| `precision_donnee` | texte | `Précision de la donnée` | Signale les 122 fiches partielles ou non valides |
-
-**Écartés :** `Nom de la commune` (le COG fait foi), les 8 autres colonnes de surfaces ventilées, et les 4 colonnes décès et bâtiments.
-
-### 3.3 Référentiel COG
-
-| Table | Grain et clé | Colonnes | Remarque |
-|---|---|---|---|
-| `stg_cog__communes` | Une commune au 01/01/2026, clé `code_commune` | `code_commune`, `code_departement`, `code_region`, `code_ctcd` (69D ou 69M), `libelle_commune`, `millesime_cog` | Filtre `TYPECOM = 'COM'` : les arrondissements de Lyon et les communes déléguées ne sont pas au grain |
-| `stg_cog__departements` | Un département, clé `code_departement` | `code_departement`, `code_region`, `libelle_departement` | 101 lignes. La Météo des forêts couvre les 96 de la métropole. |
-| `stg_cog__mouvements` | Un mouvement | `mod`, `date_effet`, `typecom_avant`, `code_commune_avant`, `typecom_apres`, `code_commune_apres` | Les deux `typecom` s'ajoutent au tableau de minimisation : ils servent à ne retenir que les communes de destination. |
+**Dates de la BD Forêt :** la réalité décrite va de 2007 à 2014 selon les départements. Pour le Rhône, les métadonnées donnent une fin (26/07/2010) antérieure au début (20/12/2010) : c'est l'objet de la règle Q-BDF-13.
 
 ## 4. Silver : intermédiaire (consolidation)
 
@@ -158,144 +118,135 @@ Une source à la fois. On type, on renomme en `snake_case` français, on harmoni
 
 | Conflit | Constat | Résolution |
 |---|---|---|
-| Noms | `num_dep`, `Département` et `DEP` désignent la même chose | Un nom cible : `code_departement` |
-| Formats | `1` contre `01` ; ISO 8601 `…T16:00:00Z` contre `AAAA-MM-JJ hh:mm:ss` ; séparateurs `,` et `;` | Normalisé en staging |
-| Fuseaux | Météo des forêts en UTC ; BDIFF sans fuseau | Comparaison en dates locales (Europe/Paris) |
-| Sens des dates | Météo des forêts : `date` est la date d'**émission** ; le niveau vaut pour le lendemain (J+1) ou le surlendemain (J+2) | `jour_cible` calculé en intermédiaire |
-| Codes | Codes commune de l'année du feu contre COG 2026 ; département 69 = Rhône (69D) + Métropole (69M) | Table de passage (4.3) ; `code_ctcd` porté par la commune |
-| Grain | Feu × commune (BDIFF) contre département × jour (Météo des forêts) | Jointure au grain le plus gros : département × jour |
-| Unités | Surfaces en m² (BDIFF seule) ; niveaux ordinaux de 1 à 4, non additifs | m² gardés jusqu'à la couche gold ; un niveau ne se somme ni ne se moyenne |
+| Noms | `num_dep`, `Département`, `DEP`, `code_insee_du_departement` | Un nom cible : `code_departement` |
+| Formats | `1` contre `01` ; ISO 8601 en UTC contre date locale ; séparateurs `,` et `;` | Normalisé en staging |
+| Fuseaux | Météo des forêts en UTC ; BDIFF sans fuseau (l'heure est celle de l'arrivée de l'alerte au CODIS, fuseau non précisé) | Comparaison en dates locales (Europe/Paris) |
+| Sens des dates | Météo des forêts : `date` est la date d'**émission** ; le niveau vaut pour J+1 et J+2 | `jour_cible` calculé |
+| Codes | Code commune de l'année du feu contre COG 2026 ; 69 = Rhône (69D) + Métropole (69M) | Table de passage (4.2) ; `code_ctcd` |
+| Grain | Feu × commune, département × jour, polygone de végétation | Jointure au grain commun (département × jour ; commune) |
+| Unités | Surfaces en m² ; niveaux ordinaux de 1 à 4, non additifs | m² gardés ; un niveau ne se somme ni ne se moyenne |
 
-### 4.2 Clés
+Les clés de jointure sont naturelles : code commune et code département (Insee). Le feu reçoit une clé de substitution, `feu_sk` (hachage de `source|id`), pour accueillir plus tard le fichier SDMIS. On ne joint **jamais sur un libellé**.
 
-| Clé | Sorte | Portée | Usage |
-|---|---|---|---|
-| `code_commune` (COG) | Naturelle | Universelle | Jointure feux × territoire |
-| `code_departement` | Naturelle | Universelle | Jointure feux × niveau de danger |
-| `id_feu_bdiff` | Métier | BDIFF | Identité d'un feu dans la BDIFF |
-| (`code_departement`, `date_emission`) | Naturelle composée | Météo des forêts | Identité d'un bulletin |
-| `feu_sk` | De substitution | Entrepôt | Hachage de (`source`, `id_source`). Un feu présent dans la BDIFF et dans le fichier SDMIS n'a de clé dans aucune des deux sources. |
+### 4.2 Table de passage des communes : `int_territoire__passage_communes`
 
-Ordre de recherche : d'abord le code exact, puis le code passé par la table de passage. **Jamais un libellé**, et pas de rapprochement approché : il n'est pas nécessaire, puisque 100 % des codes sont résolus.
+Elle est générée depuis le COG, jamais écrite à la main. Pour chaque code commune rencontré dans la BDIFF :
+- s'il existe au COG 2026, règle `identique` ;
+- si c'est un arrondissement municipal, règle `arrondissement municipal` (commune parente) ;
+- sinon, on suit les mouvements vers les communes de type `COM` jusqu'à un code présent en 2026 ;
+- s'il reste plusieurs communes possibles, le cas est **ambigu**, et sans aucune, il est **introuvable** : dans les deux cas, le feu est rejeté, jamais deviné.
 
-### 4.3 Table de passage des communes : `int_territoire__passage_communes`
+**Résultat national :**
+- 9 675 codes : 9 478 identiques, 196 résolus par les mouvements, 1 introuvable.
+- Chaque code résolu mène à une seule commune. La cardinalité est **plusieurs pour un** (fusions) : agréger à la commune 2026 est sûr.
+- 475 feux sont rattachés par un mouvement. Exemple dans le Rhône : 69211 (Saint-Jean-d'Ardières) devient 69019 (Belleville-en-Beaujolais).
+- **Rejet :** le code 83999, une « commune inconnue » saisie dans le Var, porte 12 feux (801 ha), mis en table de rejet.
 
-**Grain :** un code commune rencontré dans une source → un code COG 2026.
+### 4.3 Modèles intermédiaires
 
-**Colonnes :** `code_commune_origine`, `code_commune_cog2026`, `regle` (`identique` ou `mouvement`), `mods_appliques`.
+| Modèle | Grain | Lignes |
+|---|---|---|
+| `int_territoire__communes` | Commune 2026 + département, région, `code_ctcd`, `perimetre_sdmis`, population | 34 875 |
+| `int_bdiff__feux_rattaches` | Feu rattaché à sa commune 2026, avec `feu_sk` et la règle utilisée | 52 798 |
+| `int_bdiff__feux_rejets` | Feu non rattaché, avec son motif | 12 |
+| `int_mdf__danger_jour` | Département × jour cible : J+1 de la veille et J+2 de l'avant-veille | 35 904 |
+| `int_feux__danger` | **Tous** les feux (rattachés ou non à une commune) × niveau du jour d'alerte, avec `statut_bulletin` | 52 810 |
+| `int_bd_foret__formation_commune` | Polygone de végétation × commune (surface intersectée) | 284 161 |
+| `int_territoire__vegetation_commune` | Commune d'Auvergne-Rhône-Alpes : surfaces de forêt, de lande et de formation herbacée, taux de boisement, dates de la BD Forêt | 4 025 |
+| `int_bd_foret__controle_geotraitement` | Département : surface des polygones contre somme des morceaux | 12 |
 
-**Construction :**
-- un code présent au COG 2026 donne la règle `identique` ;
-- sinon on suit les mouvements, en ne retenant que les destinations de type `COM`, jusqu'à atteindre un code présent en 2026.
-
-La table est générée depuis le COG : pas de `CASE WHEN` écrit à la main. Elle est versionnée par le millésime COG.
+`statut_bulletin` vaut `niveau disponible`, `hors saison du bulletin`, `année sans bulletin` (avant 2024) ou `département hors Météo des forêts` (outre-mer). Un feu sans niveau **reste** dans la table : ces feux sont l'objet de Q3. Un feu non rattaché à une commune reste compté à l'échelle de son département.
 
 **Mesuré :**
-- 25 codes absents du COG 2026, portés par 48 feux. 22 sont résolus par une création de commune nouvelle (MOD 32), 3 par une création puis une suppression de commune déléguée (MOD 32 et 35).
-- Chaque code mène à **une seule** commune. La cardinalité est donc **plusieurs pour un** (fusions) : agréger à la commune 2026 est sûr, aucune répartition n'est nécessaire.
-- Exemple dans le Rhône : 69211 (Saint-Jean-d'Ardières) devient 69019 (Belleville-en-Beaujolais, 69D).
-- Une fois rattachés, les 62 feux du Rhône se répartissent en 53 dans le Rhône (69D) et 9 dans la Métropole (69M).
+- 2024-2025, France : 3 908 feux, dont 2 612 avec un niveau (66,8 %) et 1 252 hors saison du bulletin.
+- Auvergne-Rhône-Alpes : 337 feux, dont 225 avec un niveau ; Rhône : 3 feux. Le manque M-1 demeure : la BDIFF ne suffit pas pour un seuil propre au Rhône.
+- Végétation d'Auvergne-Rhône-Alpes : forêt 38,4 % du territoire, lande 2,7 %. Rhône 26,3 % (69D : 28,8 %, 69M : 13,5 %) ; Ardèche 59,1 % ; Drôme 53,5 %.
 
-**Limite assumée :** le rattachement au territoire 2026 répond à la question « où, avec les communes d'aujourd'hui ». Le code d'origine est conservé, pour pouvoir historiser le territoire (SCD de type 2) en S5.
+### 4.4 Survivance : une règle par attribut
 
-### 4.4 Modèles intermédiaires
+| Attribut | Sources | Règle |
+|---|---|---|
+| Niveau de danger d'un jour | J+1 de la veille, J+2 de l'avant-veille | J+1 fait foi (vérité à date). J+2 sert à l'analyse de sensibilité. Pas de comblement : un jour sans J+1 a un niveau vide. |
+| Commune d'un feu | Code BDIFF, COG 2026 | Code COG 2026 via la table de passage ; le code d'origine est conservé |
+| Libellés commune et département | BDIFF, Météo des forêts, COG, ADMIN EXPRESS | Le COG fait foi |
+| Population | ADMIN EXPRESS | Seule source |
+| Existence, date et surface d'un feu | BDIFF, SDMIS (attendu) | BDIFF jusqu'en 2025 ; le SDMIS primera pour le 69 s'il est plus complet, et l'écart sera documenté |
 
-| Modèle | Grain | Construction | Lignes attendues |
-|---|---|---|---|
-| `int_territoire__communes` | Une commune 2026 | Communes + libellé du département + `perimetre_sdmis` (département 69, 69D et 69M) | Toutes les communes 2026 (4 025 dans la région 84) |
-| `int_bdiff__feux_rattaches` | Un feu | `stg_bdiff__feux` en jointure externe vers la table de passage, + `code_commune_cog2026`, `code_ctcd`, `feu_sk`, `source = 'BDIFF'` | 4 072 rattachés, 0 rejeté |
-| `int_bdiff__feux_rejets` | Un feu non rattaché | Lignes sans correspondance, avec leur motif, leur fichier et leur ligne d'origine | 0 au 17/11 |
-| `int_mdf__danger_jour` | Un département × un jour cible | J+1 de la veille et J+2 de l'avant-veille, côte à côte (survivance en 4.5) | 35 904 (96 × 374 jours cibles) |
-| `int_feux__danger` | Un feu | Feu en jointure externe vers le niveau du jour d'alerte, sur (`code_departement`, `date_alerte` = `jour_cible`), + `statut_bulletin` | 4 072 |
+### 4.5 Rapprochement BDIFF ↔ SDMIS (à réception du fichier)
 
-`statut_bulletin` prend trois valeurs : `niveau disponible`, `hors saison du bulletin`, `année sans bulletin` (avant 2024). Un feu sans niveau **reste** dans la table : ces feux sont précisément l'objet de Q3.
-
-**Mesuré (2024-2025, seule période commune aux deux sources) :**
-- 337 feux dans la région. 225 ont un niveau J+1 (66,8 %), 112 surviennent hors de la saison du bulletin.
-- Le Rhône ne compte que 3 feux sur ces deux années, tous avec un niveau. Cela confirme le manque M-1 : un seuil propre au Rhône ne peut pas reposer sur la seule BDIFF.
-
-### 4.5 Survivance : une règle par attribut
-
-| Attribut | Sources | Règle | Valeur retenue |
-|---|---|---|---|
-| Niveau de danger d'un jour | J+1 de la veille, J+2 de l'avant-veille | Vérité à date : J+1 fait foi. J+2 sert à l'analyse de sensibilité. **Pas de comblement :** un jour sans J+1 a un niveau vide. | `niveau_reference = niveau_j1` |
-| Commune d'un feu | Code BDIFF, COG 2026 | Code COG 2026 via la table de passage ; le code d'origine est conservé | `code_commune_cog2026` |
-| Libellé commune et département | BDIFF, Météo des forêts, COG | Le COG fait foi, jamais un libellé de source | Libellé COG |
-| Appartenance 69D / 69M | COG | `CTCD` du COG | `code_ctcd` |
-| Existence, date et surface d'un feu | BDIFF, SDMIS (attendu) | BDIFF jusqu'en 2025. Le SDMIS primera pour le 69 s'il est plus complet, et l'écart sera documenté ([matrice](../sources/matrice.md)). | Valeur BDIFF, avec `source` |
-
-Chaque valeur retenue garde sa source : colonnes `source`, `date_emission_j1` et `regle`.
-
-Avec la règle « pas de comblement », chaque saison compte un jour sans J+1 (le surlendemain du dernier bulletin) et un jour sans J+2 (le lendemain du premier bulletin). Cela fait 288 couples département × jour de chaque type sur les trois saisons.
-
-### 4.6 Rapprochement BDIFF ↔ SDMIS (à appliquer à réception du fichier)
-
-Aucune clé n'est commune aux deux sources. La règle est fixée dès maintenant pour ne pas la choisir au vu des résultats.
-
-1. **Blocage :** même commune COG 2026, et date d'alerte à ± 1 jour.
-2. **Règle sûre :** même commune, même date et surface proche : c'est le même feu. Le seuil de « surface proche » part de ± 20 %, valeur provisoire à régler sur un échantillon vérifié à la main.
-3. **Zone grise** (date à ± 1 jour, ou surfaces plus éloignées) : revue manuelle. Elle est faisable vu les volumes : 62 feux BDIFF en 20 ans dans le 69.
+Règle fixée d'avance, pour ne pas la choisir au vu des résultats :
+1. **Blocage :** même commune 2026, date à ± 1 jour.
+2. **Même feu :** même commune, même date, surface proche. Seuil de départ : ± 20 %, à régler sur un échantillon vérifié à la main.
+3. **Zone grise :** revue manuelle (62 feux BDIFF en 20 ans dans le 69).
 4. **Sinon :** deux feux distincts.
 
-| Erreur | Effet sur la décision | Choix |
-|---|---|---|
-| Faux positif (deux feux fusionnés) | Des feux disparaissent : feux sous le seuil sous-estimés, secteurs sous-dotés | **L'erreur la plus coûteuse** (un feu manqué). Seuil de fusion automatique haut. |
-| Faux négatif (un feu compté deux fois) | Feux surestimés, renforcement plus fréquent que nécessaire | Coût budgétaire, mesuré et documenté |
+Le faux positif (deux feux fusionnés, donc des feux manqués) coûte plus que le faux négatif (un feu compté deux fois) : le seuil de fusion automatique est haut. La précision et le rappel seront mesurés et écrits avec le seuil.
 
-La précision et le rappel seront mesurés sur un échantillon vérifié à la main, et écrits avec le seuil retenu.
+### 4.6 Géotraitement de la végétation
 
-### 4.7 Rejets et non-perte
+L'intersection des polygones de la BD Forêt (12 départements) avec les communes d'ADMIN EXPRESS est calculée en Python (shapely), en lisant les géométries par les vues staging. Un polygone qui déborde sur un département voisin est découpé entre les communes concernées.
 
-Une ligne qui ne se rapproche pas n'est ni supprimée ni devinée. Elle va dans une table de rejet avec son motif. Après chaque consolidation, les nombres de lignes **et** les sommes de surfaces sont réconciliés avec la staging. Les tests sont décrits dans [regles-qualite.md](regles-qualite.md), section 3.
+Contrôle Q-CONS-10 : en Haute-Savoie, 0,23 % de la surface (5,9 km²) ne tombe dans aucune commune française. Ce sont des polygones qui débordent sur la Suisse. Le défaut est connu et sans effet sur les taux communaux.
 
-## 5. RGPD, licences et accès par couche
+## 5. RGPD, licences et accès
 
 | Couche | Données personnelles | Mesure |
 |---|---|---|
-| Silos et raw | BDIFF : décès et bâtiments détruits, qui permettent d'isoler une personne à la commune. SDMIS (attendu) : les champs listés dans la minimisation. | Accès réservé au pipeline et à la responsable qualité |
-| Staging | Aucune : les colonnes décès et bâtiments sont supprimées. Pour le SDMIS, l'identifiant d'intervention sera pseudonymisé par hachage avec clé secrète (HMAC SHA-256), clé conservée hors du dépôt. | Test bloquant Q-RGPD-01 |
-| Intermédiaire | Aucune, seulement des pseudonymes | Test bloquant Q-RGPD-01 |
-| Gold | Aucune. La cause d'un feu n'est jamais affichée à la commune quand celle-ci compte moins de 3 feux (risque de ré-identification). | Règle à implémenter en S4 |
+| Silos et raw | BDIFF : décès et bâtiments détruits (peuvent isoler une personne à la commune) | Le fichier reste sur les postes de l'équipe, hors Git |
+| Staging, intermédiaire | Aucune : colonnes supprimées en staging | Test bloquant Q-RGPD-01 sur le catalogue des colonnes |
+| Gold | Aucune ; cause jamais affichée pour une commune de moins de 3 feux | Règle Q-RGPD-02, à écrire en S4 |
 
-**Droits d'accès (protection dès la conception, art. 25) :**
-- `role_pipeline` écrit dans toutes les couches ;
-- `role_equipe_data` lit staging et intermédiaire ;
-- `role_lecteur` lit **uniquement** `marts` : c'est le rôle des utilisateurs du self-service.
+**Accès :** DuckDB est un fichier sans gestion de rôles. La protection repose donc sur la conception : aucune colonne personnelle après raw, ce que le test vérifie. Pour le self-service, la couche gold sera exportée seule dans un fichier distinct, ou dans un serveur PostgreSQL avec un rôle `lecteur` limité à `marts`. Ce choix se fera en S4.
 
-**Licences à respecter en aval :**
-- BDIFF : pas d'usage commercial, pas de modification présentée comme la donnée d'origine. Toute restitution cite `bdiff.agriculture.gouv.fr` et indique que les droits de reproduction sont réservés.
-- Météo des forêts : Licence Ouverte 2.0, mention « Météo-France ».
-- COG : licence **non vérifiée**.
+**Licences en aval :**
+- BDIFF : pas d'usage commercial ; citer `bdiff.agriculture.gouv.fr` et la mention « droits de reproduction réservés ».
+- Météo des forêts : Licence Ouverte 2.0, « Météo-France ».
+- COG : Licence Ouverte 2.0, « Source : Insee » (vérifié le 18/11 dans les mentions légales d'insee.fr).
+- BD Forêt et ADMIN EXPRESS : Licence Ouverte 2.0, « IGN ».
 
-## 6. Couche gold et self-service (S4-S5, non construite)
+## 6. Utiliser et reconstruire la base
 
-Ce qui est déjà fixé :
-- la couche gold lira uniquement l'intermédiaire ;
-- c'est le seul schéma ouvert aux utilisateurs ;
-- elle servira les questions Q1 à Q4 de la [matrice](../sources/matrice.md).
+**Ouvrir la base**, en lecture seule pour ne pas la bloquer pendant une reconstruction :
+- DBeaver : nouvelle connexion DuckDB, puis choisir le fichier ;
+- Python : `duckdb.connect("data/entrepot/feux_de_foret.duckdb", read_only=True)` ;
+- en ligne de commande : `duckdb -readonly data/entrepot/feux_de_foret.duckdb`.
 
-Le grain des faits, l'étoile, la matrice en bus et la dimension territoire historisée se décident en S4 et S5. L'outil de restitution se choisit en UE01.C.
+Le fichier est au format DuckDB 1.2 : il s'ouvre avec toute version 1.2 ou plus récente.
+
+**Reconstruire** à partir des silos, en 3 à 6 minutes :
+```bash
+pip install -r pipeline/requirements.txt
+python pipeline/construire_entrepot.py                # met à jour, ignore les fichiers déjà chargés
+python pipeline/construire_entrepot.py --idempotence  # preuve Q-PIP-01
+```
+Le script s'arrête si une règle « bloquer » échoue : la couche suivante n'est pas alimentée. Il compacte ensuite la base.
+
+**Vérifier l'intégrité :** `data/bronze/SHA256SUMS.txt` pour les silos, `data/entrepot/feux_de_foret.duckdb.sha256` pour la base livrée.
+
+**Partager :** le dossier `data/` est exclu de Git par `.gitignore`. Il est transmis hors dépôt, ou reconstruit par chaque membre à partir des silos.
 
 ## 7. Choix techniques
 
-| # | Choix | Alternative écartée | Justification | Statut |
-|---|---|---|---|---|
-| 1 | ELT avec dbt | ETL | Une règle fausse se corrige et se rejoue sans ré-extraire ; c'est l'outil du cours | Retenu |
-| 2 | Entrepôt PostgreSQL, un schéma par couche | DuckDB | Droits par rôle et par schéma, accès simultanés pour le self-service, connecteurs BI. DuckDB (un seul fichier) gère mal les droits et les accès concurrents. | Proposé, à valider par Yakoub |
-| 3 | Silos en dossiers datés hors Git (ou MinIO) | Données versionnées dans le dépôt | Licence BDIFF, volume, rejeu de tout chargement passé | Proposé |
-| 4 | Extraction complète | Incrémentale | Petits volumes, pas de marqueur de modification fiable | Retenu |
-| 5 | Idempotence : remplacement par fichier, puis dédoublonnage en staging | Insertion simple | Un fichier rechargé ne double rien ; le journal le prouve | Retenu |
-| 6 | Feux × danger joints au grain département × jour | Commune × jour | Le niveau n'existe qu'au département | Retenu |
-| 7 | Niveau de référence J+1, sans comblement | Moyenne de J+1 et J+2, ou J+2 en secours | Vérité à date ; un niveau n'est jamais deviné | Retenu |
-| 8 | Territoire du COG 2026 + code d'origine conservé | Code d'origine seul | Jointure complète dès maintenant ; l'historisation reste possible en S5 | Retenu |
-| 9 | Non rapprochés en table de rejet | Suppression ou devinette | Totaux réconciliables, erreurs retrouvables | Retenu |
+| # | Choix | Alternative écartée | Justification |
+|---|---|---|---|
+| 1 | ELT : chargement brut, transformation dans la base | ETL | Une règle fausse se corrige et se rejoue sans ré-extraire |
+| 2 | **DuckDB**, un fichier, un schéma par couche | PostgreSQL | Rien à installer sur les postes Windows ; un seul fichier qui regroupe tout ; SQL standard ; compatible dbt (`dbt-duckdb`) et DBeaver. Limite : pas de rôles (section 5). |
+| 3 | Transformations en SQL dans un script Python | dbt dès maintenant | Le script porte le chargement des formats (zip, 7z, shapefile, GeoPackage) et le géotraitement. Les requêtes staging et intermédiaire se reprennent telles quelles en modèles dbt. |
+| 4 | Silos datés dans `data/bronze`, hors Git | Données versionnées | Licence BDIFF, volume (798 Mo), rejeu de tout chargement passé |
+| 5 | Extraction complète | Incrémentale | Petits volumes, pas de marqueur de modification fiable |
+| 6 | Idempotence : empreinte au journal + remplacement par fichier + dédoublonnage en staging | Insertion simple | Prouvée par Q-PIP-01 |
+| 7 | Géométries en WKB dans raw, exposées en vues staging | Géométries laissées dans les fichiers | Une seule base qui contient tout ; pas de copie de 1,5 Go |
+| 8 | Feux × danger au grain département × jour | Commune × jour | Le niveau n'existe qu'au département |
+| 9 | Niveau de référence J+1, sans comblement | Moyenne J+1/J+2, ou J+2 en secours | Vérité à date ; un niveau n'est jamais deviné |
+| 10 | Territoire du COG 2026, code d'origine conservé | Code d'origine seul | Jointure complète ; historisation possible en S5 |
+| 11 | Non rapprochés en table de rejet | Suppression ou devinette | Totaux réconciliés, erreurs retrouvables |
 
 ## 8. Limites et points ouverts
 
 | Point | Effet | Suite |
 |---|---|---|
-| BD Forêt V2 pas encore ouverte | Pas de dénominateur de surface boisée (M-8) | Ajouter `stg_bd_foret__formations` après ouverture du fichier |
-| Fichier SDMIS non reçu | Pas de feux 2026, Rhône incomplet (M-1, M-2) | Le modèle est prêt à l'accueillir (4.6, `feu_sk`) |
-| `Définitions.pdf` non relu | Fuseau de l'heure d'alerte et libellés du type de peuplement non vérifiés | Relecture par Melissa |
-| BDIFF extraite pour la région seulement | La comparaison nationale (Q4) est impossible côté feux | Refaire l'extraction département par département |
-| Licence du COG non vérifiée | — | Vérifier les conditions sur insee.fr |
+| Fichier SDMIS non reçu | Pas de feux 2026 ; Rhône sous-représenté (M-1, M-2) | Modèle prêt (4.5, `feu_sk`) |
+| BD Forêt limitée à Auvergne-Rhône-Alpes | Pas de taux de boisement pour comparer le Rhône à la France (Q4) | Télécharger les 84 autres départements (plusieurs Go) ou une statistique nationale de surface forestière : à décider |
+| BD Forêt de 2007-2014 | La végétation a pu changer, et les catégories de surface de la BDIFF changent en 2023 | Écrit dans le rapport ; à reprendre avec l'historisation (S5) |
+| Fuseau de l'heure d'alerte BDIFF non précisé | Faible effet : la jointure se fait au jour | Hypothèse : heure légale française |
+| Libellés du type de peuplement | Déduits de l'ordre de la liste de `Définitions.pdf` | À confirmer auprès du producteur |

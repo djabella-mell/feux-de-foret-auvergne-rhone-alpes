@@ -1,0 +1,5 @@
+duckdb>=1.1
+pandas>=2.0
+pyogrio>=0.7
+shapely>=2.0
+py7zr>=0.20
