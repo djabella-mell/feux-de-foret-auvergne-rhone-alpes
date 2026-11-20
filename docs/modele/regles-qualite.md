@@ -118,3 +118,18 @@ L'unicité, dimension du cours, n'a pas de caractéristique dédiée dans ISO/IE
 | Q2. À quel niveau se produisent les feux ? | **Avec réserves** | 2 612 feux de 2024-2025 ont un niveau en France, 225 en Auvergne-Rhône-Alpes, 3 dans le Rhône. Un seuil s'estime à l'échelle régionale ou nationale et se transpose au Rhône. |
 | Q3. Pourquoi des feux à niveau bas ? | **Avec réserves** | Un feu sur trois (2024-2025) survient hors saison du bulletin ; la cause manque pour un feu sur deux |
 | Q4. Le Rhône face à ses voisins et à la France ? | **Utilisable** côté indice et feux ; **avec réserves** côté exposition | Les feux sont maintenant nationaux. La surface boisée ne couvre que les 12 départements de la région. |
+
+## 7. Règles ajoutées le 19/11/2026 (nouvelles sources)
+
+| Règle | Couche | Dimension | Énoncé | Décision | Résultat du 19/11 |
+|---|---|---|---|---|---|
+| Q-SIS-01 | staging | Unicité | (année, SIS) en double dans les statistiques DGSCGC | bloquer | réussi |
+| Q-SIS-02 | staging | Complétude de la population | année 2008-2024 sans ligne pour le SDMIS (69) | alerter | réussi |
+| Q-SIS-03 | staging | Complétude des valeurs | SIS × année sans détail « feux de végétations » (schéma 2010-2013) | tolérer | 396 lignes, attendu |
+| Q-MET-01 | staging | Unicité | (station, date) en double dans les données quotidiennes Météo-France | bloquer | réussi |
+| Q-MET-02 | staging | Complétude des valeurs | année 1991-2025 où Lyon-Bron a moins de 98 % de TX renseignées | alerter | réussi |
+| Q-MET-03 | staging | Validité | TX hors de -30 à 50 °C ou pluie négative | alerter | réussi |
+| Q-GAS-01 | staging | Conformité au référentiel | commune GASPAR « feu de forêt » absente du COG 2026 | alerter | 3 communes (fusions), sans effet sur le Rhône |
+| Q-CAS-01 | staging | Validité | site SDMIS hors de l'emprise du Rhône | alerter | réussi |
+
+Q-RGPD-01 s'applique aussi au schéma `marts`. Bilan de l'exécution du 19/11/2026 : 45 règles, 33 réussies, 5 alertes et 7 tolérances connues, aucune règle bloquante en échec. Les résultats sont exportés à chaque exécution dans `data/marts/_qualite_tests.parquet` et affichés sur la page « Sources et méthode » du tableau de bord.

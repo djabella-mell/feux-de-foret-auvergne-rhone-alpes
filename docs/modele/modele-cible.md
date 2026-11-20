@@ -250,3 +250,32 @@ Le script s'arrête si une règle « bloquer » échoue : la couche suivante n'e
 | BD Forêt de 2007-2014 | La végétation a pu changer, et les catégories de surface de la BDIFF changent en 2023 | Écrit dans le rapport ; à reprendre avec l'historisation (S5) |
 | Fuseau de l'heure d'alerte BDIFF non précisé | Faible effet : la jointure se fait au jour | Hypothèse : heure légale française |
 | Libellés du type de peuplement | Déduits de l'ordre de la liste de `Définitions.pdf` | À confirmer auprès du producteur |
+
+## 9. Couche marts et nouvelles sources (19/11/2026)
+
+Cinq silos ont été ajoutés dans `data/bronze/` (empreintes dans `SHA256SUMS.txt`) :
+
+| Silo | Contenu | Table raw | Table staging |
+|---|---|---|---|
+| `dgscgc_interventions_sis/2026-11-19` | statistiques annuelles des SIS 2008-2024 (DGSCGC) | `raw.dgscgc_interventions_sis` | `stg_dgscgc__interventions_sis` |
+| `meteo_france_quotidien/2026-11-19` | données quotidiennes RR-T-Vent du Rhône, 1950-2026 | `raw.meteo_quotidien` | `stg_meteo__quotidien` |
+| `gaspar/2026-11-19` | risques par commune (DDRM) | `raw.gaspar_ddrm_risques` | `stg_gaspar__risques_communes` |
+| `sdmis_casernes/2026-11-19` | 108 sites du SDMIS, dont 101 CIS (data.grandlyon.com) | `raw.sdmis_casernes` | `stg_sdmis__casernes` |
+| `presse/2026-11-19` | 5 chiffres 2026 cités par la presse, avec lien (confiance faible) | `raw.presse_chiffres_2026` | `stg_presse__chiffres_2026` |
+
+Modèles intermédiaires ajoutés : `int_meteo__jours_lyon_bron` (pluie sur 10 jours, jour de chaleur sèche, niveau MdF du 69), `int_sdis__feux_vegetation` (SIS × année, feux BDIFF rapprochés), `int_territoire__risque_feu_communes`.
+
+Le schéma `marts` contient les tables lues par le tableau de bord, exportées en Parquet dans `data/marts/` :
+
+| Table | Grain | Usage |
+|---|---|---|
+| `fct_feux` | un feu BDIFF | couverture du seuil |
+| `fct_danger_jour` | département × jour de bulletin | jours de renfort |
+| `fct_sdis_feux_vegetation` | département × année | angle mort de la BDIFF |
+| `fct_meteo_lyon_bron` | jour, depuis 1991 | chaleur sèche (contexte) |
+| `dim_departements` | département | libellés, région |
+| `dim_communes_rhone` | commune du Rhône | boisement, contour simplifié, feux 2006-2025, classement DDRM |
+| `dim_casernes` | site SDMIS | position des CIS |
+| `ref_presse_2026` | chiffre de presse | contexte 2026 |
+
+Deux fichiers techniques accompagnent l'export : `_qualite_tests.parquet` (règles de la dernière exécution) et `_journal_sources.parquet` (bilan des chargements par source).

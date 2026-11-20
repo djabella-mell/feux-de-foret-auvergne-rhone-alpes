@@ -80,7 +80,7 @@ def ident(nom: str) -> str:
 # --------------------------------------------------------------------------- raw
 
 def initialiser(con: duckdb.DuckDBPyConnection) -> None:
-    for s in ("raw", "staging", "intermediate", "qualite"):
+    for s in ("raw", "staging", "intermediate", "marts", "qualite"):
         con.execute(f"CREATE SCHEMA IF NOT EXISTS {s}")
     con.execute("""
         CREATE TABLE IF NOT EXISTS raw._journal_chargement (
@@ -135,8 +135,12 @@ class Chargeur:
                                         "empreinte déjà chargée"])
             return
 
-        colonnes = list(dict.fromkeys(k for l in lignes for k in l)) if lignes else []
-        df = pd.DataFrame(lignes, columns=colonnes, dtype=object)
+        if isinstance(lignes, pd.DataFrame):
+            colonnes = list(lignes.columns)
+            df = lignes.astype(object).copy()
+        else:
+            colonnes = list(dict.fromkeys(k for l in lignes for k in l)) if lignes else []
+            df = pd.DataFrame(lignes, columns=colonnes, dtype=object)
         texte = [c for c in colonnes if c not in BINAIRES]
         df[texte] = df[texte].where(df[texte].notna() & (df[texte] != ""), None)
         df["_id_chargement"] = id_ch
@@ -305,11 +309,61 @@ def charger_admin_express(ch: Chargeur) -> None:
                    list(range(1, len(lignes) + 1)), membre=couche, empreinte=empreinte, message=str(crs))
 
 
+def charger_dgscgc(ch: Chargeur) -> None:
+    """Statistiques annuelles des interventions des SIS (DGSCGC), une ligne par SIS et par an."""
+    for f in sorted(dernier_silo("dgscgc_interventions_sis").glob("dgscgc_interventions_SIS_*.csv")):
+        lignes, nums, rejets = lire_csv(f.read_bytes().decode("cp1252"), 1, ";")
+        ch.charger("dgscgc_interventions_sis", "dgscgc_interventions_sis", f, lignes, nums, rejets=rejets,
+                   message="encodage cp1252 ; le schéma change selon les années")
+
+
+METEO_COLONNES = ["NUM_POSTE", "NOM_USUEL", "LAT", "LON", "ALTI", "AAAAMMJJ", "RR", "QRR", "TN", "QTN",
+                  "TX", "QTX", "FFM", "QFFM", "FXI", "QFXI"]
+
+
+def charger_meteo_quotidien(ch: Chargeur) -> None:
+    """Données climatologiques quotidiennes (Météo-France), toutes les stations du département.
+    Seules les 16 colonnes utiles sont chargées (température, pluie, vent et leurs codes qualité)."""
+    for f in sorted(dernier_silo("meteo_france_quotidien").glob("Q_*_RR-T-Vent.csv.gz")):
+        df = pd.read_csv(f, sep=";", dtype=str, usecols=METEO_COLONNES, keep_default_na=False)
+        ch.charger("meteo_france_quotidien", "meteo_quotidien", f, df[METEO_COLONNES],
+                   list(range(2, len(df) + 2)), message="16 colonnes sur 60 (minimisation)")
+
+
+def charger_gaspar(ch: Chargeur) -> None:
+    """GASPAR (Géorisques) : seul le fichier des risques par commune (DDRM) sert le projet."""
+    f = next(dernier_silo("gaspar").glob("gaspar.zip"))
+    z = zipfile.ZipFile(f)
+    m = next(n for n in sorted(z.namelist()) if n.startswith("ddrm_risq"))
+    lignes, nums, rejets = lire_csv(z.read(m).decode("utf-8"), 1, ";")
+    ch.charger("gaspar", "gaspar_ddrm_risques", f, lignes, nums, membre=m, rejets=rejets)
+
+
+def charger_geojson(ch: Chargeur, source: str, table: str) -> None:
+    for f in sorted(dernier_silo(source).glob("*.geojson")):
+        g = json.loads(f.read_text(encoding="utf-8"))
+        lignes = [{**{k: (None if v is None else str(v)) for k, v in ft["properties"].items()},
+                   "geometrie_geojson": json.dumps(ft["geometry"])} for ft in g["features"]]
+        ch.charger(source, table, f, lignes, list(range(1, len(lignes) + 1)))
+
+
+def charger_presse(ch: Chargeur) -> None:
+    """Chiffres 2026 du SDMIS relayés par la presse : proxy temporaire, confiance faible (manque M-2)."""
+    for f in sorted(dernier_silo("presse").glob("*.csv")):
+        lignes, nums, rejets = lire_csv(f.read_text(encoding="utf-8"), 1, ";")
+        ch.charger("presse", "presse_chiffres_2026", f, lignes, nums, rejets=rejets)
+
+
 def charger_raw(con, forcer=False) -> None:
     ch = Chargeur(con, forcer)
     for nom, fn in [("Météo des forêts", charger_meteo_des_forets), ("BDIFF", charger_bdiff),
                     ("COG", charger_cog), ("BD Forêt V2", charger_bd_foret),
-                    ("ADMIN EXPRESS COG", charger_admin_express)]:
+                    ("ADMIN EXPRESS COG", charger_admin_express),
+                    ("Interventions des SIS (DGSCGC)", charger_dgscgc),
+                    ("Météo-France quotidien", charger_meteo_quotidien),
+                    ("GASPAR", charger_gaspar),
+                    ("Casernes SDMIS", lambda c: charger_geojson(c, "sdmis_casernes", "sdmis_casernes")),
+                    ("Presse 2026", charger_presse)]:
         log(f"raw : {nom}")
         fn(ch)
 
@@ -407,6 +461,51 @@ FROM raw.bd_foret_formations""",
 SELECT code_insee AS code_commune, code_insee_du_departement AS code_departement, geometrie_wkb
 FROM raw.admin_express_commune""",
 
+"stg_dgscgc__interventions_sis": r"""
+WITH src AS (
+  SELECT *, row_number() OVER (PARTITION BY "Année", "Numéro" ORDER BY _date_chargement DESC) AS rn
+  FROM raw.dgscgc_interventions_sis)
+SELECT CAST("Année" AS INTEGER)                                         AS annee,
+       "Numéro"                                                         AS code_sis,
+       CASE WHEN "Numéro" = 'BSPP' THEN '75' WHEN "Numéro" = 'BMPM' THEN '13'
+            WHEN regexp_matches("Numéro", '^[0-9]$') THEN lpad("Numéro", 2, '0') ELSE "Numéro" END AS code_departement,
+       ("Numéro" IN ('BSPP', 'BMPM'))                                   AS sis_hors_sdis,
+       "Département"                                                    AS libelle_departement_source,
+       TRY_CAST(nullif(regexp_replace("Feux de végétations", '[^0-9]', '', 'g'), '') AS INTEGER) AS feux_vegetation,
+       TRY_CAST(nullif(regexp_replace("Incendies", '[^0-9]', '', 'g'), '') AS INTEGER)           AS incendies,
+       TRY_CAST(nullif(regexp_replace("Total interventions", '[^0-9]', '', 'g'), '') AS INTEGER) AS total_interventions,
+       _fichier_source
+FROM src WHERE rn = 1""",
+
+"stg_meteo__quotidien": r"""
+WITH src AS (
+  SELECT *, row_number() OVER (PARTITION BY NUM_POSTE, AAAAMMJJ ORDER BY _date_chargement DESC) AS rn
+  FROM raw.meteo_quotidien)
+SELECT NUM_POSTE AS code_station, NOM_USUEL AS nom_station,
+       TRY_CAST(LAT AS DOUBLE) AS lat, TRY_CAST(LON AS DOUBLE) AS lon, TRY_CAST(ALTI AS INTEGER) AS altitude_m,
+       CAST(strptime(AAAAMMJJ, '%Y%m%d') AS DATE) AS date,
+       TRY_CAST(RR AS DOUBLE) AS pluie_mm, QRR AS qualite_pluie,
+       TRY_CAST(TN AS DOUBLE) AS tmin_c, TRY_CAST(TX AS DOUBLE) AS tmax_c, QTX AS qualite_tmax,
+       TRY_CAST(FFM AS DOUBLE) AS vent_moyen_ms, TRY_CAST(FXI AS DOUBLE) AS rafale_max_ms,
+       _fichier_source
+FROM src WHERE rn = 1""",
+
+"stg_gaspar__risques_communes": r"""
+SELECT DISTINCT cod_commune AS code_commune, lib_risque AS risque, num_risque AS code_risque
+FROM raw.gaspar_ddrm_risques""",
+
+"stg_sdmis__casernes": r"""
+SELECT CAST(numero_identification AS INTEGER) AS id_site, nom_officiel_site AS nom_site, cis, groupement,
+       commune, referencement AS territoire,
+       CAST(json_extract(geometrie_geojson, '$.coordinates[0]') AS DOUBLE) AS lon,
+       CAST(json_extract(geometrie_geojson, '$.coordinates[1]') AS DOUBLE) AS lat
+FROM raw.sdmis_casernes""",
+
+"stg_presse__chiffres_2026": r"""
+SELECT CAST(date_publication AS DATE) AS date_publication, CAST(date_reference AS DATE) AS date_reference,
+       perimetre, indicateur, CAST(valeur AS DOUBLE) AS valeur, unite, source_citee, media, url
+FROM raw.presse_chiffres_2026""",
+
 "stg_bd_foret__metadonnees": r"""
 SELECT DISTINCT departement_livraison AS code_departement, CAST(edition AS DATE) AS edition,
        CAST(debut_realite AS DATE) AS debut_realite, CAST(fin_realite AS DATE) AS fin_realite
@@ -418,8 +517,10 @@ def construire_staging(con) -> None:
     for nom, sql in STAGING.items():
         # les géométries ne sont pas recopiées : vue sur raw (évite de doubler 1,5 Go)
         genre = "VIEW" if nom.endswith("geometries") or "geometries_" in nom else "TABLE"
-        con.execute(f"DROP TABLE IF EXISTS staging.{nom}")
-        con.execute(f"DROP VIEW IF EXISTS staging.{nom}")
+        existant = con.execute("SELECT table_type FROM information_schema.tables "
+                               "WHERE table_schema='staging' AND table_name=?", [nom]).fetchone()
+        if existant:
+            con.execute(f"DROP {'VIEW' if existant[0] == 'VIEW' else 'TABLE'} staging.{nom}")
         con.execute(f"CREATE {genre} staging.{nom} AS {sql}")
     log(f"staging : {len(STAGING)} tables")
 
@@ -525,6 +626,36 @@ LEFT JOIN intermediate.int_mdf__danger_jour d
 }
 
 
+INTERMEDIATE_SUITE = {
+# Jour de chaleur sèche à Lyon-Bron : TX >= 30 °C et moins de 1 mm de pluie sur les 10 derniers jours.
+# Contexte de long terme seulement : la Météo des forêts tient aussi compte de l'état de la végétation.
+"int_meteo__jours_lyon_bron": r"""
+WITH b AS (
+  SELECT date, tmax_c, pluie_mm, vent_moyen_ms,
+         sum(pluie_mm) OVER (ORDER BY date ROWS BETWEEN 9 PRECEDING AND CURRENT ROW)  AS pluie_10j_mm,
+         count(pluie_mm) OVER (ORDER BY date ROWS BETWEEN 9 PRECEDING AND CURRENT ROW) AS nb_pluie_10j
+  FROM staging.stg_meteo__quotidien WHERE code_station = '69029001')
+SELECT b.*, (tmax_c >= 30 AND nb_pluie_10j = 10 AND pluie_10j_mm < 1) AS chaleur_seche,
+       (tmax_c >= 30) AS jour_tx30, d.niveau_j1 AS niveau_mdf_69
+FROM b LEFT JOIN intermediate.int_mdf__danger_jour d ON d.code_departement = '69' AND d.jour_cible = b.date""",
+
+"int_sdis__feux_vegetation": r"""
+WITH bdiff AS (SELECT code_departement, annee, count(*) AS feux_bdiff,
+                      count(*) FILTER (WHERE surface_parcourue_m2 >= 10000) AS feux_bdiff_1ha
+               FROM staging.stg_bdiff__feux GROUP BY ALL)
+SELECT s.annee, s.code_sis, s.code_departement, s.sis_hors_sdis, s.feux_vegetation, s.incendies,
+       s.total_interventions, coalesce(b.feux_bdiff, 0) AS feux_bdiff, coalesce(b.feux_bdiff_1ha, 0) AS feux_bdiff_1ha
+FROM staging.stg_dgscgc__interventions_sis s
+LEFT JOIN bdiff b ON b.code_departement = s.code_departement AND b.annee = s.annee AND NOT s.sis_hors_sdis""",
+
+"int_territoire__risque_feu_communes": r"""
+SELECT c.code_commune, (g.code_commune IS NOT NULL) AS risque_feu_ddrm
+FROM staging.stg_cog__communes c
+LEFT JOIN (SELECT DISTINCT code_commune FROM staging.stg_gaspar__risques_communes WHERE risque = 'Feu de forêt') g
+       USING (code_commune)""",
+}
+
+
 def geotraitement_vegetation(con) -> None:
     """Surface de forêt, de lande et de formation herbacée par commune (BD Forêt × ADMIN EXPRESS).
 
@@ -595,7 +726,7 @@ def geotraitement_vegetation(con) -> None:
 
 def construire_intermediate(con, geo: bool = True) -> None:
     table_de_passage(con)
-    for nom, sql in INTERMEDIATE.items():
+    for nom, sql in {**INTERMEDIATE, **INTERMEDIATE_SUITE}.items():
         con.execute(f"CREATE OR REPLACE TABLE intermediate.{nom} AS {sql}")
     if geo:
         geotraitement_vegetation(con)
@@ -699,11 +830,124 @@ REGLES = [
  "SELECT * FROM intermediate.int_feux__danger WHERE year(date_alerte) IN (2024,2025) AND niveau_reference IS NULL"),
 ("Q-CONS-10", "intermediate", "Complétude (non-perte)", "surface des formations ≠ somme des morceaux par commune (écart > 0,1 %)", "alerter", "0,1 %",
  "SELECT * FROM intermediate.int_bd_foret__controle_geotraitement WHERE abs(surface_morceaux_m2 / surface_formations_m2 - 1) > 0.001"),
+("Q-SIS-01", "staging", "Unicité", "(année, SIS) en double", "bloquer", "0",
+ "SELECT annee, code_sis FROM staging.stg_dgscgc__interventions_sis GROUP BY ALL HAVING count(*) > 1"),
+("Q-SIS-02", "staging", "Complétude de la population", "année 2008-2024 sans ligne pour le SDMIS (69)", "alerter", "0",
+ "SELECT range AS annee FROM range(2008, 2025) ANTI JOIN (SELECT annee FROM staging.stg_dgscgc__interventions_sis WHERE code_sis = '69') s ON s.annee = range"),
+("Q-SIS-03", "staging", "Complétude des valeurs", "SIS × année sans détail « feux de végétations » (schéma 2010-2013)", "tolérer", "suivi",
+ "SELECT * FROM staging.stg_dgscgc__interventions_sis WHERE feux_vegetation IS NULL"),
+("Q-MET-01", "staging", "Unicité", "(station, date) en double", "bloquer", "0",
+ "SELECT code_station, date FROM staging.stg_meteo__quotidien GROUP BY ALL HAVING count(*) > 1"),
+("Q-MET-02", "staging", "Complétude des valeurs", "année 1991-2025 où Lyon-Bron a moins de 98 % de TX renseignées", "alerter", "0",
+ """SELECT year(date) a, count(tmax_c) / count(*) t FROM staging.stg_meteo__quotidien
+    WHERE code_station = '69029001' AND year(date) BETWEEN 1991 AND 2025 GROUP BY 1 HAVING count(tmax_c) < 0.98 * count(*)"""),
+("Q-MET-03", "staging", "Validité", "TX hors de -30 à 50 °C ou pluie négative", "alerter", "0",
+ "SELECT * FROM staging.stg_meteo__quotidien WHERE tmax_c NOT BETWEEN -30 AND 50 OR pluie_mm < 0"),
+("Q-GAS-01", "staging", "Conformité au référentiel", "commune GASPAR « feu de forêt » absente du COG 2026", "alerter", "0",
+ """SELECT DISTINCT g.code_commune FROM staging.stg_gaspar__risques_communes g
+    ANTI JOIN staging.stg_cog__codes_commune c ON c.code = g.code_commune WHERE g.risque = 'Feu de forêt'"""),
+("Q-CAS-01", "staging", "Validité", "site SDMIS hors de l'emprise du Rhône", "alerter", "0",
+ "SELECT * FROM staging.stg_sdmis__casernes WHERE NOT (lon BETWEEN 4.2 AND 5.2 AND lat BETWEEN 45.4 AND 46.35)"),
 ("Q-RGPD-01", "intermediate", "Conformité", "colonne interdite après raw (décès, bâtiments, adresse, victimes…)", "bloquer", "0",
  """SELECT table_schema, table_name, column_name FROM information_schema.columns
-    WHERE table_schema IN ('staging','intermediate')
+    WHERE table_schema IN ('staging','intermediate','marts')
       AND regexp_matches(lower(column_name), 'd[ée]c[eè]s|b[âa]timent|adresse|requ[ée]rant|victime|agent|gps|coordonn')"""),
 ]
+
+
+# --------------------------------------------------------------------------- marts (restitution)
+
+MARTS = {
+"fct_feux": r"""
+SELECT f.feu_sk, f.id_feu_bdiff, year(f.date_alerte) AS annee, month(f.date_alerte) AS mois, f.date_alerte,
+       f.code_departement, d.code_region, f.code_commune_cog2026 AS code_commune, c.code_ctcd,
+       f.surface_parcourue_m2 / 1e4 AS surface_ha, f.niveau_j1, f.niveau_j2, f.statut_bulletin
+FROM intermediate.int_feux__danger f
+LEFT JOIN staging.stg_cog__departements d USING (code_departement)
+LEFT JOIN staging.stg_cog__communes c ON c.code_commune = f.code_commune_cog2026""",
+
+"fct_danger_jour": r"""
+SELECT j.code_departement, d.code_region, j.jour_cible AS jour, year(j.jour_cible) AS annee, j.niveau_j1, j.niveau_j2
+FROM intermediate.int_mdf__danger_jour j LEFT JOIN staging.stg_cog__departements d USING (code_departement)""",
+
+"dim_departements": r"""
+SELECT d.code_departement, d.libelle_departement, d.code_region, r.libelle_region,
+       sum(v.surface_foret_m2) / 1e4 AS surface_boisee_ha, sum(v.surface_commune_m2) / 1e4 AS surface_ha,
+       (SELECT sum(population) FROM staging.stg_admin_express__communes a WHERE a.code_departement = d.code_departement) AS population
+FROM staging.stg_cog__departements d
+LEFT JOIN staging.stg_cog__regions r USING (code_region)
+LEFT JOIN intermediate.int_territoire__vegetation_commune v USING (code_departement)
+GROUP BY ALL""",
+
+"fct_sdis_feux_vegetation": r"""
+SELECT s.annee, s.code_departement, d.libelle_departement, d.code_region, s.feux_vegetation, s.incendies,
+       s.feux_bdiff, s.feux_bdiff_1ha
+FROM intermediate.int_sdis__feux_vegetation s
+JOIN staging.stg_cog__departements d USING (code_departement)
+WHERE NOT s.sis_hors_sdis""",
+
+"fct_meteo_lyon_bron": r"""
+SELECT date, year(date) AS annee, month(date) AS mois, tmax_c, pluie_mm, pluie_10j_mm, chaleur_seche, jour_tx30,
+       niveau_mdf_69
+FROM intermediate.int_meteo__jours_lyon_bron WHERE year(date) >= 1991""",
+
+"dim_casernes": "SELECT * FROM staging.stg_sdmis__casernes",
+"ref_presse_2026": "SELECT * FROM staging.stg_presse__chiffres_2026",
+}
+
+
+def construire_marts(con) -> None:
+    """Couche gold de restitution du tableau de bord, exportée aussi en Parquet (data/marts)."""
+    import numpy as np
+    import shapely
+    from pyproj import Transformer
+
+    for nom, sql in MARTS.items():
+        con.execute(f"CREATE OR REPLACE TABLE marts.{nom} AS {sql}")
+    # communes du Rhône avec un contour simplifié (50 m) en WGS84 pour la carte
+    rows = con.execute("""
+        SELECT t.code_commune, t.libelle_commune, t.code_ctcd, t.population,
+               v.surface_commune_m2 / 1e4, v.surface_foret_m2 / 1e4, v.surface_lande_m2 / 1e4, v.taux_boisement,
+               r.risque_feu_ddrm, g.geometrie_wkb
+        FROM intermediate.int_territoire__communes t
+        JOIN intermediate.int_territoire__vegetation_commune v USING (code_commune)
+        JOIN intermediate.int_territoire__risque_feu_communes r USING (code_commune)
+        JOIN staging.stg_admin_express__geometries_communes g USING (code_commune)
+        WHERE t.code_departement = '69'""").fetchall()
+    vers_wgs84 = Transformer.from_crs(2154, 4326, always_xy=True)
+    geoms = shapely.simplify(shapely.from_wkb(np.array([r[-1] for r in rows], dtype=object)), 50)
+    geoms = shapely.transform(geoms, lambda xy: np.column_stack(vers_wgs84.transform(xy[:, 0], xy[:, 1])))
+    df = pd.DataFrame([r[:-1] for r in rows], columns=[
+        "code_commune", "libelle_commune", "code_ctcd", "population", "surface_ha", "surface_foret_ha",
+        "surface_lande_ha", "taux_boisement", "risque_feu_ddrm"])
+    df["geojson"] = shapely.to_geojson(shapely.set_precision(geoms, 1e-5))
+    con.register("_communes69", df)
+    con.execute("""CREATE OR REPLACE TABLE marts.dim_communes_rhone AS
+        SELECT c.*, coalesce(f.feux, 0) AS feux_bdiff_2006_2025, coalesce(f.ha, 0) AS surface_brulee_ha_2006_2025
+        FROM _communes69 c LEFT JOIN (SELECT code_commune, count(*) AS feux, sum(surface_ha) AS ha
+                                      FROM marts.fct_feux GROUP BY 1) f USING (code_commune)""")
+    con.unregister("_communes69")
+    sortie = RACINE / "data" / "marts"
+    sortie.mkdir(parents=True, exist_ok=True)
+    for (nom,) in con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='marts'").fetchall():
+        con.execute(f"COPY marts.{nom} TO '{(sortie / (nom + '.parquet')).as_posix()}' (FORMAT parquet)")
+    log(f"marts : {len(MARTS) + 1} tables, exportées dans {sortie}")
+
+
+def exporter_qualite(con, id_exec: str) -> None:
+    """Copie pour le tableau de bord : résultats des règles de l'exécution et bilan des chargements par source."""
+    sortie = RACINE / "data" / "marts"
+    con.execute(f"""COPY (SELECT couche, id_regle, dimension, enonce, decision, nb_en_faute, statut
+                          FROM qualite.resultats_tests WHERE id_execution = '{id_exec}' ORDER BY couche, id_regle)
+                    TO '{(sortie / "_qualite_tests.parquet").as_posix()}' (FORMAT parquet)""")
+    # dernier chargement réussi de chaque fichier : un fichier rechargé (remplacement idempotent) ne compte qu'une fois
+    con.execute(f"""COPY (WITH dernier AS (
+                              SELECT * FROM raw._journal_chargement WHERE statut = 'succès'
+                              QUALIFY row_number() OVER (PARTITION BY fichier, table_cible ORDER BY fin DESC) = 1)
+                          SELECT source, count(DISTINCT fichier) AS fichiers, sum(taille_octets) AS octets,
+                                 sum(lignes_inserees) AS lignes, sum(lignes_rejetees) AS rejets, max(fin) AS charge_le
+                          FROM dernier GROUP BY source ORDER BY source)
+                    TO '{(sortie / "_journal_sources.parquet").as_posix()}' (FORMAT parquet)""")
 
 
 def tester(con, couche: str, id_exec: str, ignorer: set[str] = frozenset()) -> None:
@@ -769,6 +1013,9 @@ def main() -> int:
         tester(con, "staging", id_exec)
         construire_intermediate(con, geo=not a.sans_geo)
         tester(con, "intermediate", id_exec, ignorer={"Q-CONS-10"} if a.sans_geo else set())
+        construire_marts(con)
+        tester(con, "marts", id_exec)
+        exporter_qualite(con, id_exec)
     except Bloquant as e:
         log(f"ARRÊT (règle bloquante) : {e}")
         return 2
