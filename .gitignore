@@ -1,2 +1,3 @@
 # Données : jamais dans Git (licence BDIFF, volume). Voir docs/modele/modele-cible.md
 data/
+__pycache__/
